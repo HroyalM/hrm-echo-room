@@ -49,6 +49,10 @@ export default function HomePage() {
             Friends
             <p className="text-sm font-normal text-slate-300 mt-1">Add and accept friends</p>
           </Link>
+          <Link href="/notifications" className="rounded-3xl bg-white/10 p-5 font-semibold">
+            Notifications
+            <p className="text-sm font-normal text-slate-300 mt-1">See your updates</p>
+          </Link>
           <button onClick={logout} className="rounded-3xl border border-white/20 p-4">
             Log out
           </button>
