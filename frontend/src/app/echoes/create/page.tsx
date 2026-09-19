@@ -1,105 +1,61 @@
 'use client';
 
-import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 
-export default function CreateEchoPage() {
-  const router = useRouter();
-  const [content, setContent] = useState('');
-  const [scheduledAt, setScheduledAt] = useState('');
-  const [sendTo, setSendTo] = useState<'self' | 'friend'>('self');
-  const [friendEmail, setFriendEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    const { data: userData } = await supabase.auth.getUser();
-    const user = userData.user;
-    if (!user) {
-      toast.error('Please log in first');
-      router.push('/auth/login');
-      setLoading(false);
-      return;
-    }
-
-    const { error } = await supabase.from('echoes').insert({
-      sender_id: user.id,
-      recipient_type: sendTo === 'self' ? 'self' : 'friend',
-      recipient_ids: sendTo === 'self' ? [user.id] : [],
-      recipient_emails: sendTo === 'friend' ? [friendEmail] : [],
-      content,
-      scheduled_at: new Date(scheduledAt).toISOString(),
-      delivery_methods: ['inapp'],
-      privacy: 'private',
-      status: 'scheduled',
-    });
-
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success(sendTo === 'self' ? 'Echo saved for you' : 'Echo saved for your friend');
-      router.push('/echoes/vault');
-    }
-    setLoading(false);
-  };
-
+export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="max-w-xl mx-auto bg-white rounded-2xl p-6 shadow">
-        <h1 className="text-2xl font-bold">Create an Echo</h1>
-        <p className="mt-2 text-slate-600">Send a message to yourself or a friend in the future.</p>
-
-        <form onSubmit={handleCreate} className="mt-6 space-y-4">
-          <div className="flex gap-3">
-            <button type="button" onClick={() => setSendTo('self')}
-              className={`flex-1 py-2 rounded-xl border ${sendTo === 'self' ? 'bg-sky-500 text-white' : ''}`}>
-              Myself
-            </button>
-            <button type="button" onClick={() => setSendTo('friend')}
-              className={`flex-1 py-2 rounded-xl border ${sendTo === 'friend' ? 'bg-sky-500 text-white' : ''}`}>
-              A friend
-            </button>
+    <div className="min-h-screen bg-slate-950 text-white">
+      <header className="max-w-6xl mx-auto px-4 py-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center font-bold text-lg">E</div>
+          <div>
+            <p className="font-semibold">HRM ECHO ROOM</p>
+            <p className="text-xs text-slate-400">Leave a message. Meet it in the future.</p>
           </div>
+        </div>
+        <div className="flex gap-3">
+          <Link href="/auth/login" className="px-4 py-2 rounded-full text-sm hover:bg-white/10">Log in</Link>
+          <Link href="/auth/register" className="px-5 py-2 rounded-full text-sm bg-sky-500 hover:bg-sky-400">Sign up</Link>
+        </div>
+      </header>
 
-          {sendTo === 'friend' && (
-            <input
-              required
-              type="email"
-              placeholder="Friend's email"
-              value={friendEmail}
-              onChange={e => setFriendEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border"
-            />
-          )}
+      <main className="max-w-6xl mx-auto px-4 pt-16 pb-24">
+        <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} className="text-center">
+          <p className="text-sky-400 text-sm tracking-widest uppercase">A digital time capsule</p>
+          <h1 className="mt-4 text-4xl sm:text-6xl font-bold leading-tight">
+            Leave a message.<br />
+            <span className="bg-gradient-to-r from-sky-400 to-violet-400 bg-clip-text text-transparent">
+              Meet it in the future.
+            </span>
+          </h1>
+          <p className="mt-6 text-lg text-slate-300 max-w-2xl mx-auto">
+            Write something today for yourself or someone you love.
+            HRM ECHO ROOM keeps it safe and delivers it when the time comes.
+          </p>
+          <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
+            <Link href="/auth/register" className="px-8 py-4 rounded-full bg-sky-500 hover:bg-sky-400 font-semibold shadow-lg shadow-sky-500/20">
+              Create your first Echo
+            </Link>
+            <Link href="/auth/login" className="px-8 py-4 rounded-full border border-white/20 hover:bg-white/10 font-semibold">
+              I already have an account
+            </Link>
+          </div>
+        </motion.div>
 
-          <textarea
-            required
-            rows={6}
-            placeholder="Write your message..."
-            value={content}
-            onChange={e => setContent(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border"
-          />
-          <input
-            required
-            type="datetime-local"
-            value={scheduledAt}
-            onChange={e => setScheduledAt(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border"
-          />
-          <button type="submit" disabled={loading}
-            className="w-full py-3 rounded-xl bg-sky-500 text-white font-semibold disabled:opacity-60">
-            {loading ? 'Saving…' : 'Save Echo'}
-          </button>
-        </form>
-
-        <Link href="/home" className="block mt-4 text-center text-sky-600">Back to Home</Link>
-      </div>
+        <div className="mt-20 grid md:grid-cols-3 gap-6">
+          {[
+            { title: 'Write', text: 'Create a private message, a memory, or a promise.' },
+            { title: 'Seal', text: 'Choose the date it should open. Days, months, or years later.' },
+            { title: 'Receive', text: 'When the time comes, the Echo returns to you or a friend.' },
+          ].map(item => (
+            <div key={item.title} className="rounded-3xl border border-white/10 bg-white/5 p-6">
+              <h3 className="text-xl font-semibold">{item.title}</h3>
+              <p className="mt-3 text-slate-300">{item.text}</p>
+            </div>
+          ))}
+        </div>
+      </main>
     </div>
   );
 }
