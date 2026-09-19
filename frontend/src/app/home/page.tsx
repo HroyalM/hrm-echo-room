@@ -45,6 +45,10 @@ export default function HomePage() {
             Feed
             <p className="text-sm font-normal text-slate-300 mt-1">See and share posts</p>
           </Link>
+          <Link href="/friends" className="rounded-3xl bg-white/10 p-5 font-semibold">
+            Friends
+            <p className="text-sm font-normal text-slate-300 mt-1">Add and accept friends</p>
+          </Link>
           <button onClick={logout} className="rounded-3xl border border-white/20 p-4">
             Log out
           </button>
