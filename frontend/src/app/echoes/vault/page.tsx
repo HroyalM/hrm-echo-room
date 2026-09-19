@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import Link from 'next/link';
 
 type Echo = {
@@ -11,30 +12,55 @@ type Echo = {
   scheduled_at: string;
   status: string;
   recipient_type: string;
+  recipient_ids: string[] | null;
 };
 
 export default function VaultPage() {
   const router = useRouter();
   const [echoes, setEchoes] = useState<Echo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState('');
+
+  const load = async (id: string) => {
+    const { data } = await supabase
+      .from('echoes')
+      .select('id, content, scheduled_at, status, recipient_type, recipient_ids')
+      .eq('sender_id', id)
+      .order('scheduled_at', { ascending: true });
+    setEchoes(data || []);
+  };
 
   useEffect(() => {
-    const load = async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) {
-        router.push('/auth/login');
-        return;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) router.push('/auth/login');
+      else {
+        setUserId(data.user.id);
+        load(data.user.id);
       }
-      const { data } = await supabase
-        .from('echoes')
-        .select('id, content, scheduled_at, status, recipient_type')
-        .eq('sender_id', userData.user.id)
-        .order('scheduled_at', { ascending: true });
-      setEchoes(data || []);
-      setLoading(false);
-    };
-    load();
+    });
   }, [router]);
+
+  const checkDeliveries = async () => {
+    const now = new Date().toISOString();
+    const due = echoes.filter(e => e.status === 'scheduled' && e.scheduled_at <= now);
+
+    for (const echo of due) {
+      await supabase.from('echoes').update({
+        status: 'delivered',
+        delivered_at: now,
+      }).eq('id', echo.id);
+
+      await supabase.from('notifications').insert({
+        user_id: userId,
+        type: 'echo_delivered',
+        title: 'An Echo has arrived',
+        body: echo.content,
+        data: { echo_id: echo.id },
+      });
+    }
+
+    toast.success(due.length ? `${due.length} Echo(s) delivered` : 'No Echoes due yet');
+    load(userId);
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6">
@@ -44,12 +70,10 @@ export default function VaultPage() {
           <h1 className="text-3xl font-bold">Echo Vault</h1>
           <Link href="/echoes/create" className="text-sky-400 text-sm">+ New</Link>
         </div>
-        <p className="mt-2 text-slate-400">Your sealed messages.</p>
 
-        {loading && <p className="mt-8 text-slate-400">Loading…</p>}
-        {!loading && echoes.length === 0 && (
-          <p className="mt-8 text-slate-400">No Echoes yet.</p>
-        )}
+        <button onClick={checkDeliveries} className="mt-4 w-full py-3 rounded-2xl bg-sky-500 font-semibold">
+          Check deliveries
+        </button>
 
         <div className="mt-8 space-y-4">
           {echoes.map(echo => (
@@ -58,9 +82,7 @@ export default function VaultPage() {
               <p className="mt-3 text-sm text-slate-400">
                 Opens {new Date(echo.scheduled_at).toLocaleString()}
               </p>
-              <p className="text-sm text-sky-400">
-                {echo.recipient_type === 'self' ? 'For you' : 'For a friend'} · {echo.status}
-              </p>
+              <p className="text-sm text-sky-400">{echo.status}</p>
             </div>
           ))}
         </div>
