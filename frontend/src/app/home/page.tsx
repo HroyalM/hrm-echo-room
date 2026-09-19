@@ -37,6 +37,10 @@ export default function HomePage() {
           <Link href="/echoes/vault" className="px-4 py-3 rounded-xl bg-slate-900 text-white text-center font-semibold">
             Open Vault
           </Link>
+         
+                    <Link href="/profile" className="px-4 py-3 rounded-xl bg-indigo-600 text-white text-center font-semibold">
+            Profile
+          </Link>
           <button onClick={logout} className="px-4 py-3 rounded-xl border font-semibold">
             Log out
           </button>
