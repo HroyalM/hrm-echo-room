@@ -1,50 +1,86 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import Link from 'next/link';
 
-export default function HomePage() {
+export default function CreateEchoPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [content, setContent] = useState('');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [sendTo, setSendTo] = useState<'self' | 'friend'>('self');
+  const [friendEmail, setFriendEmail] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) router.push('/auth/login');
-      else setEmail(data.user.email || '');
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const user = userData.user;
+    if (!user) {
+      router.push('/auth/login');
+      return;
+    }
+
+    const { error } = await supabase.from('echoes').insert({
+      sender_id: user.id,
+      recipient_type: sendTo === 'self' ? 'self' : 'friend',
+      recipient_ids: sendTo === 'self' ? [user.id] : [],
+      recipient_emails: sendTo === 'friend' ? [friendEmail] : [],
+      content,
+      scheduled_at: new Date(scheduledAt).toISOString(),
+      delivery_methods: ['inapp'],
+      privacy: 'private',
+      status: 'scheduled',
     });
-  }, [router]);
 
-  const logout = async () => {
-    await supabase.auth.signOut();
-    router.push('/');
+    if (error) toast.error(error.message);
+    else {
+      toast.success('Echo sealed');
+      router.push('/echoes/vault');
+    }
+    setLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6">
       <div className="max-w-xl mx-auto">
-        <p className="text-sky-400 text-sm">HRM ECHO ROOM</p>
-        <h1 className="mt-2 text-3xl font-bold">Welcome back</h1>
-        <p className="mt-2 text-slate-400">{email}</p>
+        <Link href="/home" className="text-sky-400 text-sm">← Back</Link>
+        <h1 className="mt-4 text-3xl font-bold">Create an Echo</h1>
+        <p className="mt-2 text-slate-400">Seal a message and meet it later.</p>
 
-        <div className="mt-8 grid gap-4">
-          <Link href="/echoes/create" className="rounded-3xl bg-sky-500 p-5 font-semibold">
-            Create Echo
-            <p className="text-sm font-normal text-sky-100 mt-1">Write a message for the future</p>
-          </Link>
-          <Link href="/echoes/vault" className="rounded-3xl bg-white/10 p-5 font-semibold">
-            Open Vault
-            <p className="text-sm font-normal text-slate-300 mt-1">See all your sealed messages</p>
-          </Link>
-          <Link href="/profile" className="rounded-3xl bg-violet-600 p-5 font-semibold">
-            Profile
-            <p className="text-sm font-normal text-violet-100 mt-1">Edit your name and photo</p>
-          </Link>
-          <button onClick={logout} className="rounded-3xl border border-white/20 p-4">
-            Log out
+        <form onSubmit={handleCreate} className="mt-8 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <button type="button" onClick={() => setSendTo('self')}
+              className={`py-3 rounded-2xl ${sendTo === 'self' ? 'bg-sky-500' : 'bg-white/10'}`}>
+              Myself
+            </button>
+            <button type="button" onClick={() => setSendTo('friend')}
+              className={`py-3 rounded-2xl ${sendTo === 'friend' ? 'bg-sky-500' : 'bg-white/10'}`}>
+              A friend
+            </button>
+          </div>
+
+          {sendTo === 'friend' && (
+            <input required type="email" placeholder="Friend's email" value={friendEmail}
+              onChange={e => setFriendEmail(e.target.value)}
+              className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
+          )}
+
+          <textarea required rows={7} placeholder="Write your message..." value={content}
+            onChange={e => setContent(e.target.value)}
+            className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
+
+          <input required type="datetime-local" value={scheduledAt}
+            onChange={e => setScheduledAt(e.target.value)}
+            className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
+
+          <button disabled={loading} className="w-full py-3 rounded-2xl bg-sky-500 font-semibold">
+            {loading ? 'Sealing…' : 'Seal Echo'}
           </button>
-        </div>
+        </form>
       </div>
     </div>
   );
