@@ -41,6 +41,19 @@ export default function VaultPage() {
     });
   }, [router]);
 
+  const playSound = () => {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    gain.gain.value = 0.08;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  };
+
   const deleteEcho = async (id: string) => {
     const ok = confirm('Delete this Echo?');
     if (!ok) return;
@@ -85,6 +98,7 @@ export default function VaultPage() {
       });
     }
 
+    if (due.length) playSound();
     toast.success(due.length ? `${due.length} Echo(s) delivered` : 'No Echoes due yet');
     load(userId);
   };
