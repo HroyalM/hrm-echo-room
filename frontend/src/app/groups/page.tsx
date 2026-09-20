@@ -1,23 +1,35 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 
 type Group = { id: string; name: string };
+type Msg = { id: string; sender_id: string; content: string | null; media_url: string | null; media_type: string | null; created_at: string };
 
 export default function GroupsPage() {
   const router = useRouter();
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunks = useRef<Blob[]>([]);
   const [userId, setUserId] = useState('');
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [active, setActive] = useState<Group | null>(null);
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [name, setName] = useState('');
   const [memberEmail, setMemberEmail] = useState('');
-  const [groups, setGroups] = useState<Group[]>([]);
+  const [text, setText] = useState('');
+  const [recording, setRecording] = useState(false);
 
-  const load = async () => {
+  const loadGroups = async () => {
     const { data } = await supabase.from('groups').select('id, name').order('created_at', { ascending: false });
     setGroups(data || []);
+  };
+
+  const loadMessages = async (groupId: string) => {
+    const { data } = await supabase.from('group_messages').select('id, sender_id, content, media_url, media_type, created_at').eq('group_id', groupId).order('created_at');
+    setMessages(data || []);
   };
 
   useEffect(() => {
@@ -25,41 +37,105 @@ export default function GroupsPage() {
       if (!data.user) router.push('/auth/login');
       else setUserId(data.user.id);
     });
-    load();
+    loadGroups();
   }, [router]);
 
   const createGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     const { data, error } = await supabase.from('groups').insert({ name, created_by: userId }).select('id').single();
-    if (error) toast.error(error.message);
-    else {
-      if (memberEmail && data) {
-        await supabase.from('group_members').insert({ group_id: data.id, user_email: memberEmail });
-      }
-      setName('');
-      setMemberEmail('');
-      toast.success('Group created');
-      load();
+    if (error) { toast.error(error.message); return; }
+    if (memberEmail && data) {
+      await supabase.from('group_members').insert({ group_id: data.id, user_email: memberEmail });
     }
+    setName('');
+    setMemberEmail('');
+    toast.success('Group created');
+    loadGroups();
+  };
+
+  const sendText = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!active || !text.trim()) return;
+    const { error } = await supabase.from('group_messages').insert({
+      group_id: active.id, sender_id: userId, content: text.trim(),
+    });
+    if (error) toast.error(error.message);
+    else { setText(''); loadMessages(active.id); }
+  };
+
+  const sendFile = async (file: File, type: string) => {
+    if (!active) return;
+    const path = `${userId}/${Date.now()}-${file.name}`;
+    const { error } = await supabase.storage.from('chat-media').upload(path, file);
+    if (error) { toast.error(error.message); return; }
+    const { data } = supabase.storage.from('chat-media').getPublicUrl(path);
+    await supabase.from('group_messages').insert({
+      group_id: active.id, sender_id: userId,
+      content: type === 'audio' ? 'Voice note' : 'Photo',
+      media_url: data.publicUrl, media_type: type,
+    });
+    loadMessages(active.id);
+  };
+
+  const startRec = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const rec = new MediaRecorder(stream);
+    chunks.current = [];
+    rec.ondataavailable = e => chunks.current.push(e.data);
+    rec.onstop = async () => {
+      const blob = new Blob(chunks.current, { type: 'audio/webm' });
+      await sendFile(new File([blob], 'voice.webm', { type: 'audio/webm' }), 'audio');
+      stream.getTracks().forEach(t => t.stop());
+    };
+    recRef.current = rec;
+    rec.start();
+    setRecording(true);
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-6">
-      <div className="max-w-xl mx-auto">
-        <Link href="/home" className="text-sky-400 text-sm">← Back</Link>
-        <h1 className="mt-4 text-3xl font-bold">Groups</h1>
-        <form onSubmit={createGroup} className="mt-6 space-y-3">
-          <input required value={name} onChange={e => setName(e.target.value)} placeholder="Group name"
-            className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
-          <input type="email" value={memberEmail} onChange={e => setMemberEmail(e.target.value)} placeholder="Add a member email"
-            className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
-          <button className="w-full py-3 rounded-2xl bg-sky-500 font-semibold">Create group</button>
-        </form>
-        <div className="mt-8 space-y-3">
-          {groups.map(g => (
-            <div key={g.id} className="rounded-2xl bg-white/5 p-4">{g.name}</div>
-          ))}
+    <div className="min-h-screen bg-[#0b141a] text-white">
+      <div className="max-w-xl mx-auto min-h-screen flex flex-col">
+        <div className="px-4 py-3 bg-[#202c33] flex items-center gap-3">
+          {active ? <button onClick={() => setActive(null)}>←</button> : <Link href="/home">←</Link>}
+          <h1 className="font-semibold">{active ? active.name : 'Groups'}</h1>
         </div>
+
+        {!active && (
+          <div className="p-4 space-y-4">
+            <form onSubmit={createGroup} className="space-y-2">
+              <input required value={name} onChange={e => setName(e.target.value)} placeholder="Group name" className="w-full px-4 py-3 rounded-2xl bg-[#2a3942] outline-none" />
+              <input type="email" value={memberEmail} onChange={e => setMemberEmail(e.target.value)} placeholder="Add member email" className="w-full px-4 py-3 rounded-2xl bg-[#2a3942] outline-none" />
+              <button className="w-full py-3 rounded-2xl bg-[#00a884] font-semibold">Create group</button>
+            </form>
+            {groups.map(g => (
+              <button key={g.id} onClick={() => { setActive(g); loadMessages(g.id); }} className="w-full text-left p-4 rounded-2xl bg-[#202c33]">
+                {g.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {active && (
+          <>
+            <div className="flex-1 p-3 space-y-2">
+              {messages.map(m => (
+                <div key={m.id} className={`max-w-[80%] p-3 rounded-2xl ${m.sender_id === userId ? 'bg-[#005c4b] ml-auto' : 'bg-[#202c33]'}`}>
+                  {m.media_type === 'image' && m.media_url && <img src={m.media_url} alt="" className="rounded-xl max-h-60 mb-2" />}
+                  {m.media_type === 'audio' && m.media_url && <audio controls src={m.media_url} className="w-full" />}
+                  <p>{m.content}</p>
+                </div>
+              ))}
+            </div>
+            <form onSubmit={sendText} className="p-3 flex items-center gap-2 bg-[#202c33]">
+              <label className="px-2">📷<input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && sendFile(e.target.files[0], 'image')} /></label>
+              <button type="button" onClick={recording ? () => { recRef.current?.stop(); setRecording(false); } : startRec}>
+                {recording ? '⏹' : '🎤'}
+              </button>
+              <input value={text} onChange={e => setText(e.target.value)} placeholder="Message" className="flex-1 px-4 py-3 rounded-full bg-[#2a3942] outline-none" />
+              <button className="px-4 py-3 rounded-full bg-[#00a884]">Send</button>
+            </form>
+          </>
+        )}
       </div>
     </div>
   );
