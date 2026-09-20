@@ -13,6 +13,7 @@ export default function ProfilePage() {
   const [userId, setUserId] = useState('');
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [viewPhoto, setViewPhoto] = useState('');
   const [echoes, setEchoes] = useState<{ id: string; content: string; scheduled_at: string; status: string }[]>([]);
   const [form, setForm] = useState({
     username: '', full_name: '', display_name: '', bio: '', avatar_url: '', cover_url: '',
@@ -53,6 +54,14 @@ export default function ProfilePage() {
     await supabase.from('profiles').update({ [field]: data.publicUrl }).eq('id', userId);
   };
 
+  const removePhoto = async (field: 'avatar_url' | 'cover_url') => {
+    if (!confirm(field === 'avatar_url' ? 'Remove profile photo?' : 'Remove cover photo?')) return;
+    setField(field, '');
+    const { error } = await supabase.from('profiles').update({ [field]: null }).eq('id', userId);
+    if (error) toast.error(error.message);
+    else toast.success('Photo removed');
+  };
+
   const save = async () => {
     const { error } = await supabase.from('profiles').update({
       username: form.username, full_name: form.full_name,
@@ -75,15 +84,20 @@ export default function ProfilePage() {
       <div className="max-w-xl mx-auto bg-[#242526] min-h-screen pb-8">
         <div className="relative">
           <div className="h-44 bg-gradient-to-r from-blue-700 to-indigo-700">
-            {form.cover_url && <img src={form.cover_url} className="w-full h-full object-cover" alt="" />}
+            {form.cover_url && <img src={form.cover_url} className="w-full h-full object-cover" alt="" onClick={() => setViewPhoto(form.cover_url)} />}
           </div>
           <label className="absolute right-3 top-3 bg-black/60 rounded-full px-3 py-2 text-sm">
             Add cover
             <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && upload(e.target.files[0], 'covers', 'cover_url')} />
           </label>
+          {form.cover_url && (
+            <button type="button" onClick={() => removePhoto('cover_url')} className="absolute right-3 bottom-3 bg-black/60 rounded-full px-3 py-2 text-sm">
+              Delete cover
+            </button>
+          )}
           <div className="absolute left-4 -bottom-12">
             <div className="relative w-28 h-28 rounded-full border-4 border-[#242526] bg-slate-700 overflow-hidden">
-              {form.avatar_url ? <img src={form.avatar_url} className="w-full h-full object-cover" alt="" /> : null}
+              {form.avatar_url ? <img src={form.avatar_url} className="w-full h-full object-cover" alt="" onClick={() => setViewPhoto(form.avatar_url)} /> : null}
               <label className="absolute right-0 bottom-0 bg-blue-600 w-8 h-8 rounded-full flex items-center justify-center text-sm">
                 +
                 <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && upload(e.target.files[0], 'avatars', 'avatar_url')} />
@@ -93,8 +107,14 @@ export default function ProfilePage() {
         </div>
 
         <div className="pt-16 px-4">
+          {form.avatar_url && (
+            <button type="button" onClick={() => removePhoto('avatar_url')} className="mb-2 text-sm text-red-400">
+              Remove profile photo
+            </button>
+          )}
           <h1 className="text-3xl font-bold">{name}</h1>
           {form.username && <p className="text-slate-400">@{form.username}</p>}
+          {form.email_visibility !== 'private' && <p className="text-sm text-slate-500">{email}</p>}
           {form.bio && <p className="mt-2">{form.bio}</p>}
           <div className="mt-4 grid grid-cols-3 gap-2">
             <Link href="/echoes/create" className="text-center py-2 rounded-lg bg-blue-600 font-semibold">Create</Link>
@@ -139,6 +159,12 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {viewPhoto && (
+        <div onClick={() => setViewPhoto('')} className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
+          <img src={viewPhoto} className="max-w-full max-h-full rounded-2xl" alt="" />
+        </div>
+      )}
     </AppChrome>
   );
 }
