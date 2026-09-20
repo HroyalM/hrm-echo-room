@@ -73,19 +73,38 @@ export default function ProfilePage() {
     load();
   }, [router]);
 
+  const shrink = async (file: File) => {
+    const bitmap = await createImageBitmap(file);
+    const max = 1200;
+    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext('2d');
+    ctx?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob: Blob = await new Promise(resolve => canvas.toBlob(b => resolve(b as Blob), 'image/jpeg', 0.7));
+    return new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+  };
+
   const upload = async (file: File, bucket: 'avatars' | 'covers', field: 'avatar_url' | 'cover_url') => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
+    setField(field, URL.createObjectURL(file));
     toast.loading('Uploading…');
-    const ext = file.name.split('.').pop() || 'jpg';
-    const path = `${userData.user.id}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true, contentType: file.type });
-    toast.dismiss();
-    if (error) { toast.error(error.message); return; }
-    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-    setField(field, data.publicUrl);
-    await supabase.from('profiles').update({ [field]: data.publicUrl }).eq('id', userData.user.id);
-    toast.success(field === 'avatar_url' ? 'Profile photo updated' : 'Cover photo updated');
+    try {
+      const small = await shrink(file);
+      const path = `${userData.user.id}/${Date.now()}.jpg`;
+      const { error } = await supabase.storage.from(bucket).upload(path, small, { upsert: true, contentType: 'image/jpeg' });
+      toast.dismiss();
+      if (error) { toast.error(error.message); return; }
+      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+      setField(field, data.publicUrl);
+      await supabase.from('profiles').update({ [field]: data.publicUrl }).eq('id', userData.user.id);
+      toast.success(field === 'avatar_url' ? 'Profile photo updated' : 'Cover photo updated');
+    } catch (err: any) {
+      toast.dismiss();
+      toast.error(err.message || 'Upload failed');
+    }
   };
 
   const removePhoto = async (field: 'avatar_url' | 'cover_url') => {
@@ -120,38 +139,28 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-slate-950 text-white p-6">
       <div className="max-w-xl mx-auto">
         <Link href="/home" className="text-sky-400 text-sm">← Home</Link>
-
         <div className="mt-6 rounded-3xl bg-white/5 overflow-hidden">
           <div className="relative h-36 bg-gradient-to-r from-sky-600 to-violet-600">
             {form.cover_url && <img src={form.cover_url} alt="" className="w-full h-full object-cover" />}
-            <label className="absolute right-3 bottom-3 bg-black/60 rounded-full px-3 py-2 text-sm cursor-pointer">
+            <label className="absolute right-3 bottom-3 bg-black/60 rounded-full px-3 py-2 text-sm">
               📷 Cover
               <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && upload(e.target.files[0], 'covers', 'cover_url')} />
             </label>
             {form.cover_url && (
-              <button type="button" onClick={() => removePhoto('cover_url')} className="absolute right-3 top-3 bg-black/60 rounded-full px-3 py-1 text-sm">
-                Delete cover
-              </button>
+              <button type="button" onClick={() => removePhoto('cover_url')} className="absolute right-3 top-3 bg-black/60 rounded-full px-3 py-1 text-sm">Delete cover</button>
             )}
           </div>
-
           <div className="px-6 pb-6">
             <div className="relative w-28 h-28 -mt-12 rounded-full border-4 border-slate-950 bg-slate-800 overflow-hidden">
-              {form.avatar_url ? (
-                <img src={form.avatar_url} alt="" className="w-full h-full object-cover" onClick={() => removePhoto('avatar_url')} />
-              ) : null}
-              <label className="absolute right-1 bottom-1 bg-sky-500 rounded-full w-8 h-8 flex items-center justify-center text-sm cursor-pointer">
+              {form.avatar_url ? <img src={form.avatar_url} alt="" className="w-full h-full object-cover" /> : null}
+              <label className="absolute right-1 bottom-1 bg-sky-500 rounded-full w-8 h-8 flex items-center justify-center text-sm">
                 📷
                 <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && upload(e.target.files[0], 'avatars', 'avatar_url')} />
               </label>
             </div>
             <h1 className="mt-4 text-3xl font-bold">{form.display_name || form.full_name || email}</h1>
             <p className="text-sm text-slate-500">{email}</p>
-            {form.avatar_url && (
-              <button type="button" onClick={() => removePhoto('avatar_url')} className="mt-2 text-sm text-red-400">
-                Remove profile photo
-              </button>
-            )}
+            {form.avatar_url && <button type="button" onClick={() => removePhoto('avatar_url')} className="mt-2 text-sm text-red-400">Remove profile photo</button>}
           </div>
         </div>
 
@@ -159,17 +168,14 @@ export default function ProfilePage() {
           <input value={form.full_name} onChange={e => setField('full_name', e.target.value)} placeholder="Full name" className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
           <input value={form.display_name} onChange={e => setField('display_name', e.target.value)} placeholder="Display name" className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
           <textarea value={form.bio} onChange={e => setField('bio', e.target.value)} placeholder="Bio" rows={3} className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
-
           <div>
             <label className="block mb-1 text-sm text-slate-400">Date of birth</label>
             <input type="date" value={form.date_of_birth} onChange={e => setField('date_of_birth', e.target.value)} className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
           </div>
-
           <SuggestBox label="Hometown" value={form.hometown} onChange={(v: string) => setField('hometown', v)} options={PLACES} placeholder="Type a city or country" />
           <SuggestBox label="Current city" value={form.current_city} onChange={(v: string) => setField('current_city', v)} options={PLACES} placeholder="Type a city or country" />
           <SuggestBox label="Workplace" value={form.workplace} onChange={(v: string) => setField('workplace', v)} options={WORKPLACES} placeholder="Company or job" />
           <SuggestBox label="School" value={form.school} onChange={(v: string) => setField('school', v)} options={SCHOOLS} placeholder="School" />
-
           <div>
             <label className="block mb-1 text-sm text-slate-400">Gender</label>
             <select value={form.gender} onChange={e => setField('gender', e.target.value)} className="w-full px-4 py-3 rounded-2xl bg-slate-900 outline-none">
