@@ -16,29 +16,39 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success('Welcome back');
-      router.push('/home');
-    }
+    if (error) toast.error(error.message);
+    else router.push('/home');
     setLoading(false);
   };
 
+  const forgot = async () => {
+    if (!email) {
+      toast.error('Enter your email first');
+      return;
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: 'https://echo-room-2026.vercel.app/auth/reset',
+    });
+    if (error) toast.error(error.message);
+    else toast.success('Check your email for the reset link');
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md p-8 rounded-2xl bg-white/5 border border-white/10 text-white">
-        <h1 className="text-2xl font-bold mb-6">Log in to HRM ECHO ROOM</h1>
+    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
+      <div className="w-full max-w-md p-8 rounded-2xl bg-white/5">
+        <h1 className="text-2xl font-bold mb-6">Welcome back</h1>
         <form onSubmit={handleLogin} className="space-y-4">
           <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required
-            className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-sm" />
+            className="w-full px-4 py-3 rounded-xl bg-white/10" />
           <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required
-            className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-sm" />
-          <button type="submit" disabled={loading}
-            className="w-full py-3 rounded-xl bg-sky-500 hover:bg-sky-400 font-semibold disabled:opacity-60">
+            className="w-full px-4 py-3 rounded-xl bg-white/10" />
+          <button type="submit" disabled={loading} className="w-full py-3 rounded-xl bg-sky-500 font-semibold">
             {loading ? 'Signing in…' : 'Log in'}
           </button>
         </form>
+        <button onClick={forgot} className="mt-4 text-sm text-sky-400">
+          Forgot password?
+        </button>
         <p className="mt-6 text-center text-sm text-slate-400">
           No account? <Link href="/auth/register" className="text-sky-400">Sign up</Link>
         </p>
