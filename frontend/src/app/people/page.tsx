@@ -7,14 +7,8 @@ import toast from 'react-hot-toast';
 import AppChrome from '@/components/AppChrome';
 
 type Person = {
-  id: string;
-  email: string;
-  display_name: string | null;
-  username: string | null;
-  bio: string | null;
-  avatar_url: string | null;
-  hometown: string | null;
-  current_city: string | null;
+  id: string; email: string; display_name: string | null; username: string | null;
+  bio: string | null; avatar_url: string | null; hometown: string | null; current_city: string | null;
 };
 
 export default function PeoplePage() {
@@ -28,10 +22,7 @@ export default function PeoplePage() {
 
   const open = async (person: Person, userId: string) => {
     setActive(person);
-    const { data } = await supabase
-      .from('friendships')
-      .select('status, requester_id, addressee_email, addressee_id')
-      .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+    const { data } = await supabase.from('friendships').select('status, requester_id, addressee_email, addressee_id').or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
     const row = (data || []).find(r => r.addressee_email === person.email || r.addressee_id === person.id || r.requester_id === person.id);
     setStatus(row?.status || '');
     const { data: b } = await supabase.from('blocks').select('id').eq('blocker_id', userId).eq('blocked_email', person.email).maybeSingle();
@@ -57,28 +48,16 @@ export default function PeoplePage() {
 
   const add = async () => {
     if (!active) return;
-    const { error } = await supabase.from('friendships').insert({
-      requester_id: me,
-      addressee_email: active.email,
-      addressee_id: active.id,
-      status: 'pending',
-    });
+    const { error } = await supabase.from('friendships').insert({ requester_id: me, addressee_email: active.email, addressee_id: active.id, status: 'pending' });
     if (error) toast.error(error.message);
-    else {
-      toast.success('Request sent');
-      setStatus('pending');
-    }
+    else { toast.success('Request sent'); setStatus('pending'); }
   };
 
   const block = async () => {
     if (!active) return;
-    if (blocked) {
-      await supabase.from('blocks').delete().eq('blocker_id', me).eq('blocked_email', active.email);
-      setBlocked(false);
-    } else {
-      await supabase.from('blocks').insert({ blocker_id: me, blocked_email: active.email });
-      setBlocked(true);
-    }
+    if (blocked) await supabase.from('blocks').delete().eq('blocker_id', me).eq('blocked_email', active.email);
+    else await supabase.from('blocks').insert({ blocker_id: me, blocked_email: active.email });
+    setBlocked(!blocked);
   };
 
   return (
@@ -86,26 +65,26 @@ export default function PeoplePage() {
       <div className="max-w-xl mx-auto p-4">
         {!active && (
           <>
-            <h1 className="text-2xl font-bold">People</h1>
+            <button onClick={() => router.push('/home')} className="text-[#0866ff] text-sm">← Home</button>
+            <h1 className="mt-2 text-2xl font-bold">People</h1>
+            {people.length === 0 && <p className="mt-6 text-slate-400">No other users yet. Make a second account and that person will appear here.</p>}
             <div className="mt-4 space-y-2">
               {people.map(p => (
                 <button key={p.id} onClick={() => open(p, me)} className="w-full text-left p-4 rounded-2xl bg-[#242526]">
-                  <p className="font-semibold">{p.display_name || p.username || 'User'}</p>
+                  <p className="font-semibold">{p.display_name || p.username || p.email}</p>
                   <p className="text-sm text-slate-400">@{p.username || 'user'}</p>
                 </button>
               ))}
             </div>
           </>
         )}
-
         {active && (
           <div>
             <button onClick={() => setActive(null)} className="text-[#0866ff] text-sm">← People</button>
             <div className="mt-4 w-24 h-24 rounded-full bg-[#3a3b3c] overflow-hidden">
               {active.avatar_url && <img src={active.avatar_url} className="w-full h-full object-cover" alt="" />}
             </div>
-            <h1 className="mt-4 text-3xl font-bold">{active.display_name || active.username || 'User'}</h1>
-            <p className="text-slate-400">@{active.username || 'user'}</p>
+            <h1 className="mt-4 text-3xl font-bold">{active.display_name || active.username || active.email}</h1>
             <p className="mt-3">{active.bio}</p>
             {status === 'accepted' && <p className="mt-4 text-[#0866ff]">Friends</p>}
             {status === 'pending' && <p className="mt-4 text-slate-400">Request pending</p>}
