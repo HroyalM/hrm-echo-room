@@ -17,14 +17,15 @@ type Friendship = {
 export default function FriendsPage() {
   const router = useRouter();
   const [userId, setUserId] = useState('');
+  const [userEmail, setUserEmail] = useState('');
   const [email, setEmail] = useState('');
   const [items, setItems] = useState<Friendship[]>([]);
 
-  const load = async (id: string) => {
+  const load = async (id: string, myEmail: string) => {
     const { data } = await supabase
       .from('friendships')
       .select('id, requester_id, addressee_email, addressee_id, status')
-      .or(`requester_id.eq.${id},addressee_id.eq.${id}`);
+      .or(`requester_id.eq.${id},addressee_id.eq.${id},addressee_email.eq.${myEmail}`);
     setItems(data || []);
   };
 
@@ -33,24 +34,45 @@ export default function FriendsPage() {
       if (!data.user) router.push('/auth/login');
       else {
         setUserId(data.user.id);
-        load(data.user.id);
+        setUserEmail(data.user.email || '');
+        load(data.user.id, data.user.email || '');
       }
     });
   }, [router]);
 
   const sendRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+
     const { error } = await supabase.from('friendships').insert({
       requester_id: userId,
       addressee_email: email,
+      addressee_id: profile?.id || null,
       status: 'pending',
     });
-    if (error) toast.error(error.message);
-    else {
-      setEmail('');
-      toast.success('Request sent');
-      load(userId);
+
+    if (error) {
+      toast.error(error.message);
+      return;
     }
+
+    if (profile?.id) {
+      await supabase.from('notifications').insert({
+        user_id: profile.id,
+        type: 'friend_request',
+        title: 'New friend request',
+        body: `${userEmail} wants to be your friend`,
+      });
+    }
+
+    setEmail('');
+    toast.success('Request sent');
+    load(userId, userEmail);
   };
 
   const accept = async (id: string) => {
@@ -59,7 +81,7 @@ export default function FriendsPage() {
       .update({ status: 'accepted', addressee_id: userId })
       .eq('id', id);
     if (error) toast.error(error.message);
-    else load(userId);
+    else load(userId, userEmail);
   };
 
   return (
