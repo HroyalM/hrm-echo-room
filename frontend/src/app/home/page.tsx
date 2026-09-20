@@ -21,39 +21,32 @@ export default function HomePage() {
     router.push('/');
   };
 
+  const items = [
+    { href: '/echoes/create', title: 'Create Echo', desc: 'Write a future message' },
+    { href: '/echoes/vault', title: 'Vault', desc: 'See and deliver Echoes' },
+    { href: '/feed', title: 'Feed', desc: 'Posts, likes and comments' },
+    { href: '/friends', title: 'Friends', desc: 'Add and accept friends' },
+    { href: '/chat', title: 'Chat', desc: 'Message a friend' },
+    { href: '/groups', title: 'Groups', desc: 'Create a group' },
+    { href: '/notifications', title: 'Notifications', desc: 'See updates' },
+    { href: '/profile', title: 'Profile', desc: 'Name, bio and photo' },
+  ];
+
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6">
       <div className="max-w-xl mx-auto">
         <p className="text-sky-400 text-sm">HRM ECHO ROOM</p>
-        <h1 className="mt-2 text-3xl font-bold">Welcome back</h1>
+        <h1 className="mt-2 text-3xl font-bold">Home</h1>
         <p className="mt-2 text-slate-400">{email}</p>
 
-        <div className="mt-8 grid gap-4">
-          <Link href="/echoes/create" className="rounded-3xl bg-sky-500 p-5 font-semibold">
-            Create Echo
-            <p className="text-sm font-normal text-sky-100 mt-1">Write a message for the future</p>
-          </Link>
-          <Link href="/echoes/vault" className="rounded-3xl bg-white/10 p-5 font-semibold">
-            Open Vault
-            <p className="text-sm font-normal text-slate-300 mt-1">See all your sealed messages</p>
-          </Link>
-          <Link href="/profile" className="rounded-3xl bg-violet-600 p-5 font-semibold">
-            Profile
-            <p className="text-sm font-normal text-violet-100 mt-1">Edit your name and photo</p>
-          </Link>
-          <Link href="/feed" className="rounded-3xl bg-white/10 p-5 font-semibold">
-            Feed
-            <p className="text-sm font-normal text-slate-300 mt-1">See and share posts</p>
-          </Link>
-          <Link href="/friends" className="rounded-3xl bg-white/10 p-5 font-semibold">
-            Friends
-            <p className="text-sm font-normal text-slate-300 mt-1">Add and accept friends</p>
-          </Link>
-          <Link href="/notifications" className="rounded-3xl bg-white/10 p-5 font-semibold">
-            Notifications
-            <p className="text-sm font-normal text-slate-300 mt-1">See your updates</p>
-          </Link>
-          <button onClick={logout} className="rounded-3xl border border-white/20 p-4">
+        <div className="mt-8 grid gap-3">
+          {items.map(item => (
+            <Link key={item.href} href={item.href} className="rounded-2xl bg-white/10 p-4">
+              <p className="font-semibold">{item.title}</p>
+              <p className="text-sm text-slate-400">{item.desc}</p>
+            </Link>
+          ))}
+          <button onClick={logout} className="rounded-2xl border border-white/20 p-4">
             Log out
           </button>
         </div>
