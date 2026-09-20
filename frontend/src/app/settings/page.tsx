@@ -5,76 +5,78 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
+import AppChrome from '@/components/AppChrome';
 
 export default function SettingsPage() {
   const router = useRouter();
   const [id, setId] = useState('');
+  const [avatar, setAvatar] = useState('');
+  const [theme, setTheme] = useState('dark');
   const [form, setForm] = useState({
-    privacy_profile: 'public',
-    privacy_friends: 'friends',
-    privacy_posts: 'friends',
-    privacy_echoes: 'friends',
-    email_visibility: 'private',
+    privacy_profile: 'public', privacy_friends: 'friends', privacy_posts: 'friends',
+    privacy_echoes: 'friends', email_visibility: 'private',
   });
 
   useEffect(() => {
+    const saved = localStorage.getItem('echo-theme') || 'dark';
+    setTheme(saved);
+    document.documentElement.classList.toggle('light', saved === 'light');
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { router.push('/auth/login'); return; }
       setId(data.user.id);
-      const { data: row } = await supabase.from('profiles').select('privacy_profile, privacy_friends, privacy_posts, privacy_echoes, email_visibility').eq('id', data.user.id).single();
-      if (row) setForm({
-        privacy_profile: row.privacy_profile || 'public',
-        privacy_friends: row.privacy_friends || 'friends',
-        privacy_posts: row.privacy_posts || 'friends',
-        privacy_echoes: row.privacy_echoes || 'friends',
-        email_visibility: row.email_visibility || 'private',
-      });
+      const { data: row } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
+      if (row) {
+        setAvatar(row.avatar_url || '');
+        setForm({
+          privacy_profile: row.privacy_profile || 'public',
+          privacy_friends: row.privacy_friends || 'friends',
+          privacy_posts: row.privacy_posts || 'friends',
+          privacy_echoes: row.privacy_echoes || 'friends',
+          email_visibility: row.email_visibility || 'private',
+        });
+      }
     });
   }, [router]);
+
+  const changeTheme = (value: string) => {
+    setTheme(value);
+    localStorage.setItem('echo-theme', value);
+    document.documentElement.classList.toggle('light', value === 'light');
+  };
 
   const save = async () => {
     const { error } = await supabase.from('profiles').update(form).eq('id', id);
     if (error) toast.error(error.message);
-    else toast.success('Privacy saved');
+    else toast.success('Saved');
   };
 
-  const logout = async () => { await supabase.auth.signOut(); router.push('/'); };
-
-  const Select = ({ label, keyName }: { label: string; keyName: keyof typeof form }) => (
-    <div>
-      <label className="block mb-1 text-sm text-slate-400">{label}</label>
-      <select value={form[keyName]} onChange={e => setForm({ ...form, [keyName]: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none">
-        <option value="public">Public</option>
-        <option value="friends">Friends</option>
-        <option value="private">Only me</option>
-      </select>
-    </div>
-  );
-
   return (
-    <div className="min-h-screen bg-[#18191a] text-white p-4">
-      <div className="max-w-xl mx-auto space-y-4">
-        <Link href="/profile" className="text-sky-400 text-sm">← Profile</Link>
-        <h1 className="text-3xl font-bold">Settings & privacy</h1>
-
+    <AppChrome avatar={avatar}>
+      <div className="max-w-xl mx-auto p-4 space-y-4">
+        <h1 className="text-2xl font-bold">Settings & privacy</h1>
         <section className="rounded-2xl bg-[#242526] p-4 space-y-3">
-          <h2 className="font-bold">Who can see what</h2>
-          <Select label="Your profile" keyName="privacy_profile" />
-          <Select label="Your friends list" keyName="privacy_friends" />
-          <Select label="Your posts" keyName="privacy_posts" />
-          <Select label="Your Echoes" keyName="privacy_echoes" />
-          <Select label="Your email" keyName="email_visibility" />
-          <button onClick={save} className="w-full py-3 rounded-xl bg-blue-600 font-semibold">Save</button>
+          <h2 className="font-bold">Theme</h2>
+          <select value={theme} onChange={e => changeTheme(e.target.value)} className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c]">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
         </section>
-
         <section className="rounded-2xl bg-[#242526] p-4 space-y-3">
-          <Link href="/profile" className="block">Edit profile</Link>
-          <Link href="/auth/reset" className="block">Change password</Link>
-          <Link href="/notifications" className="block">Notifications</Link>
-          <Link href="/friends" className="block">Friends</Link>
-          <button onClick={logout} className="text-red-400">Log out</button>
+          <h2 className="font-bold">Privacy</h2>
+          <select value={form.privacy_profile} onChange={e => setForm({ ...form, privacy_profile: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c]">
+            <option value="public">Profile: public</option>
+            <option value="friends">Profile: friends</option>
+            <option value="private">Profile: only me</option>
+          </select>
+          <select value={form.email_visibility} onChange={e => setForm({ ...form, email_visibility: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c]">
+            <option value="private">Email: only me</option>
+            <option value="friends">Email: friends</option>
+            <option value="public">Email: public</option>
+          </select>
+          <button onClick={save} className="w-full py-3 rounded-xl bg-[#0866ff] font-semibold">Save</button>
         </section>
+        <Link href="/profile" className="block">Edit profile</Link>
       </div>
-    </div>
+    </AppChrome>
   );
 }
