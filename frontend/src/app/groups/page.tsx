@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import Link from 'next/link';
+import AppChrome from '@/components/AppChrome';
 
 type Group = { id: string; name: string };
 type Msg = { id: string; sender_id: string; content: string | null; media_url: string | null; media_type: string | null; created_at: string };
@@ -14,6 +14,7 @@ export default function GroupsPage() {
   const recRef = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const [userId, setUserId] = useState('');
+  const [avatar, setAvatar] = useState('');
   const [groups, setGroups] = useState<Group[]>([]);
   const [active, setActive] = useState<Group | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -33,20 +34,20 @@ export default function GroupsPage() {
   };
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) router.push('/auth/login');
-      else setUserId(data.user.id);
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) { router.push('/auth/login'); return; }
+      setUserId(data.user.id);
+      const { data: profile } = await supabase.from('profiles').select('avatar_url').eq('id', data.user.id).single();
+      setAvatar(profile?.avatar_url || '');
+      loadGroups();
     });
-    loadGroups();
   }, [router]);
 
   const createGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     const { data, error } = await supabase.from('groups').insert({ name, created_by: userId }).select('id').single();
     if (error) { toast.error(error.message); return; }
-    if (memberEmail && data) {
-      await supabase.from('group_members').insert({ group_id: data.id, user_email: memberEmail });
-    }
+    if (memberEmail && data) await supabase.from('group_members').insert({ group_id: data.id, user_email: memberEmail });
     setName('');
     setMemberEmail('');
     toast.success('Group created');
@@ -56,9 +57,7 @@ export default function GroupsPage() {
   const sendText = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!active || !text.trim()) return;
-    const { error } = await supabase.from('group_messages').insert({
-      group_id: active.id, sender_id: userId, content: text.trim(),
-    });
+    const { error } = await supabase.from('group_messages').insert({ group_id: active.id, sender_id: userId, content: text.trim() });
     if (error) toast.error(error.message);
     else { setText(''); loadMessages(active.id); }
   };
@@ -93,22 +92,18 @@ export default function GroupsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b141a] text-white">
-      <div className="max-w-xl mx-auto min-h-screen flex flex-col">
-        <div className="px-4 py-3 bg-[#202c33] flex items-center gap-3">
-          {active ? <button onClick={() => setActive(null)}>←</button> : <Link href="/home">←</Link>}
-          <h1 className="font-semibold">{active ? active.name : 'Groups'}</h1>
-        </div>
-
+    <AppChrome avatar={avatar}>
+      <div className="max-w-xl mx-auto min-h-[70vh] flex flex-col">
         {!active && (
           <div className="p-4 space-y-4">
+            <h1 className="text-2xl font-bold">Groups</h1>
             <form onSubmit={createGroup} className="space-y-2">
-              <input required value={name} onChange={e => setName(e.target.value)} placeholder="Group name" className="w-full px-4 py-3 rounded-2xl bg-[#2a3942] outline-none" />
-              <input type="email" value={memberEmail} onChange={e => setMemberEmail(e.target.value)} placeholder="Add member email" className="w-full px-4 py-3 rounded-2xl bg-[#2a3942] outline-none" />
-              <button className="w-full py-3 rounded-2xl bg-[#00a884] font-semibold">Create group</button>
+              <input required value={name} onChange={e => setName(e.target.value)} placeholder="Group name" className="w-full px-4 py-3 rounded-2xl bg-[#3a3b3c] outline-none" />
+              <input type="email" value={memberEmail} onChange={e => setMemberEmail(e.target.value)} placeholder="Member email" className="w-full px-4 py-3 rounded-2xl bg-[#3a3b3c] outline-none" />
+              <button className="w-full py-3 rounded-2xl bg-[#0866ff] font-semibold">Create group</button>
             </form>
             {groups.map(g => (
-              <button key={g.id} onClick={() => { setActive(g); loadMessages(g.id); }} className="w-full text-left p-4 rounded-2xl bg-[#202c33]">
+              <button key={g.id} onClick={() => { setActive(g); loadMessages(g.id); }} className="w-full text-left p-4 rounded-2xl bg-[#242526]">
                 {g.name}
               </button>
             ))}
@@ -117,26 +112,28 @@ export default function GroupsPage() {
 
         {active && (
           <>
+            <div className="px-4 py-3 bg-[#242526] flex items-center gap-3">
+              <button onClick={() => setActive(null)}>←</button>
+              <h1 className="font-semibold">{active.name}</h1>
+            </div>
             <div className="flex-1 p-3 space-y-2">
               {messages.map(m => (
-                <div key={m.id} className={`max-w-[80%] p-3 rounded-2xl ${m.sender_id === userId ? 'bg-[#005c4b] ml-auto' : 'bg-[#202c33]'}`}>
-                  {m.media_type === 'image' && m.media_url && <img src={m.media_url} alt="" className="rounded-xl max-h-60 mb-2" />}
+                <div key={m.id} className={`max-w-[80%] p-3 rounded-2xl ${m.sender_id === userId ? 'bg-[#005c4b] ml-auto' : 'bg-[#242526]'}`}>
+                  {m.media_type === 'image' && m.media_url && <img src={m.media_url} alt="" className="rounded-xl max-h-56 mb-2" />}
                   {m.media_type === 'audio' && m.media_url && <audio controls src={m.media_url} className="w-full" />}
                   <p>{m.content}</p>
                 </div>
               ))}
             </div>
-            <form onSubmit={sendText} className="p-3 flex items-center gap-2 bg-[#202c33]">
-              <label className="px-2">📷<input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && sendFile(e.target.files[0], 'image')} /></label>
-              <button type="button" onClick={recording ? () => { recRef.current?.stop(); setRecording(false); } : startRec}>
-                {recording ? '⏹' : '🎤'}
-              </button>
-              <input value={text} onChange={e => setText(e.target.value)} placeholder="Message" className="flex-1 px-4 py-3 rounded-full bg-[#2a3942] outline-none" />
-              <button className="px-4 py-3 rounded-full bg-[#00a884]">Send</button>
+            <form onSubmit={sendText} className="p-3 flex items-center gap-2 bg-[#242526]">
+              <label>📷<input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && sendFile(e.target.files[0], 'image')} /></label>
+              <button type="button" onClick={recording ? () => { recRef.current?.stop(); setRecording(false); } : startRec}>{recording ? '⏹' : '🎤'}</button>
+              <input value={text} onChange={e => setText(e.target.value)} placeholder="Message" className="flex-1 px-4 py-3 rounded-full bg-[#3a3b3c] outline-none" />
+              <button className="px-4 py-3 rounded-full bg-[#0866ff]">Send</button>
             </form>
           </>
         )}
       </div>
-    </div>
+    </AppChrome>
   );
 }
