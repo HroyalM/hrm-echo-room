@@ -59,9 +59,12 @@ export default function HomePage() {
     <div className="min-h-screen bg-[#18191a] text-white pb-20">
       <header className="sticky top-0 bg-[#242526] px-4 py-3 flex justify-between items-center">
         <p className="text-xl font-bold text-sky-400">echo</p>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+          <Link href="/search">Search</Link>
           <Link href="/people">Find people</Link>
-          <Link href="/profile">Profile</Link>
+          <Link href="/profile" className="w-9 h-9 rounded-full bg-white/10 overflow-hidden flex items-center justify-center">
+            {avatar ? <img src={avatar} alt="Profile" className="w-full h-full object-cover" /> : 'Me'}
+          </Link>
         </div>
       </header>
 
