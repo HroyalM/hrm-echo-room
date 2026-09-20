@@ -1,52 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 
-const PLACES = [
-  'United States', 'United Kingdom', 'United Arab Emirates', 'Nigeria',
-  'Port Harcourt, Nigeria', 'Lagos, Nigeria', 'Abuja, Nigeria',
-  'London, United Kingdom', 'New York, United States', 'Houston, United States',
-  'Accra, Ghana', 'Nairobi, Kenya', 'Toronto, Canada', 'Dubai, United Arab Emirates',
-];
-const SCHOOLS = ['University of Port Harcourt', 'University of Lagos', 'UNN', 'UNIPORT', 'Harvard University'];
-const WORKPLACES = ['Google', 'Microsoft', 'Self-employed', 'Student', 'Freelancer'];
-const GENDERS = ['Female', 'Male', 'Non-binary', 'Prefer not to say'];
-const RELATIONSHIPS = ['Single', 'In a relationship', 'Engaged', 'Married', "It's complicated", 'Prefer not to say'];
-
-function SuggestBox({ label, value, onChange, options, placeholder }: any) {
-  const [open, setOpen] = useState(false);
-  const matches = useMemo(() => {
-    const q = value.trim().toLowerCase();
-    if (!q) return options.slice(0, 6);
-    return options.filter((o: string) => o.toLowerCase().includes(q)).slice(0, 8);
-  }, [value, options]);
-  return (
-    <div className="relative">
-      <label className="block mb-1 text-sm text-slate-400">{label}</label>
-      <input value={value} placeholder={placeholder} onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        onChange={e => onChange(e.target.value)}
-        className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
-      {open && matches.length > 0 && (
-        <div className="absolute z-10 mt-1 w-full rounded-2xl bg-slate-900 border border-white/10 max-h-48 overflow-auto">
-          {matches.map((item: string) => (
-            <button type="button" key={item} onMouseDown={() => onChange(item)} className="block w-full text-left px-4 py-2 hover:bg-white/10">{item}</button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function ProfilePage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
-  const [viewPhoto, setViewPhoto] = useState('');
+  const [echoes, setEchoes] = useState<{ id: string; content: string; scheduled_at: string; status: string }[]>([]);
   const [form, setForm] = useState({
     username: '', full_name: '', display_name: '', bio: '', avatar_url: '', cover_url: '',
     date_of_birth: '', hometown: '', current_city: '', workplace: '', school: '',
@@ -59,6 +23,7 @@ export default function ProfilePage() {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) { router.push('/auth/login'); return; }
       setEmail(userData.user.email || '');
+
       const { data } = await supabase.from('profiles').select('*').eq('id', userData.user.id).single();
       if (data) {
         setForm({
@@ -69,53 +34,27 @@ export default function ProfilePage() {
           relationship_status: data.relationship_status || '', website: data.website || '',
         });
       }
+
+      const { data: echoData } = await supabase
+        .from('echoes')
+        .select('id, content, scheduled_at, status')
+        .eq('sender_id', userData.user.id)
+        .order('created_at', { ascending: false });
+      setEchoes(echoData || []);
       setLoading(false);
     };
     load();
   }, [router]);
 
-  const shrink = async (file: File) => {
-    const bitmap = await createImageBitmap(file);
-    const max = 1200;
-    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    const ctx = canvas.getContext('2d');
-    ctx?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const blob: Blob = await new Promise(resolve => canvas.toBlob(b => resolve(b as Blob), 'image/jpeg', 0.7));
-    return new File([blob], 'photo.jpg', { type: 'image/jpeg' });
-  };
-
-  const upload = async (file: File, bucket: 'avatars' | 'covers', field: 'avatar_url' | 'cover_url') => {
+  const uploadPhoto = async (file: File) => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
-    setField(field, URL.createObjectURL(file));
-    toast.loading('Uploading…');
-    try {
-      const small = await shrink(file);
-      const path = `${userData.user.id}/${Date.now()}.jpg`;
-      const { error } = await supabase.storage.from(bucket).upload(path, small, { upsert: true, contentType: 'image/jpeg' });
-      toast.dismiss();
-      if (error) { toast.error(error.message); return; }
-      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-      setField(field, data.publicUrl);
-      await supabase.from('profiles').update({ [field]: data.publicUrl }).eq('id', userData.user.id);
-      toast.success(field === 'avatar_url' ? 'Profile photo updated' : 'Cover photo updated');
-    } catch (err: any) {
-      toast.dismiss();
-      toast.error(err.message || 'Upload failed');
-    }
-  };
-
-  const removePhoto = async (field: 'avatar_url' | 'cover_url') => {
-    const ok = confirm(field === 'avatar_url' ? 'Remove profile photo?' : 'Remove cover photo?');
-    if (!ok) return;
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
-    setField(field, '');
-    await supabase.from('profiles').update({ [field]: null }).eq('id', userData.user.id);
-    toast.success('Photo removed');
+    const path = `${userData.user.id}-${Date.now()}.jpg`;
+    const { error } = await supabase.storage.from('avatars').upload(path, file);
+    if (error) { toast.error(error.message); return; }
+    const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+    setField('avatar_url', data.publicUrl);
+    toast.success('Photo uploaded');
   };
 
   const save = async (e: React.FormEvent) => {
@@ -125,82 +64,69 @@ export default function ProfilePage() {
     const { error } = await supabase.from('profiles').update({
       username: form.username, full_name: form.full_name,
       display_name: form.display_name || form.full_name || form.username,
-      bio: form.bio, avatar_url: form.avatar_url, cover_url: form.cover_url,
-      date_of_birth: form.date_of_birth || null, hometown: form.hometown, current_city: form.current_city,
-      workplace: form.workplace, school: form.school, gender: form.gender,
-      relationship_status: form.relationship_status, website: form.website,
+      bio: form.bio, avatar_url: form.avatar_url, date_of_birth: form.date_of_birth || null,
+      hometown: form.hometown, current_city: form.current_city, workplace: form.workplace,
+      school: form.school, gender: form.gender, relationship_status: form.relationship_status, website: form.website,
     }).eq('id', userData.user.id);
     if (error) toast.error(error.message);
     else toast.success('Profile saved');
   };
 
   if (loading) return <p className="min-h-screen bg-slate-950 text-white p-6">Loading…</p>;
+  const shownName = form.display_name || form.full_name || form.username || email;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6">
       <div className="max-w-xl mx-auto">
         <Link href="/home" className="text-sky-400 text-sm">← Home</Link>
+
         <div className="mt-6 rounded-3xl bg-white/5 overflow-hidden">
-          <div className="relative h-36 bg-gradient-to-r from-sky-600 to-violet-600">
-            {form.cover_url && <img src={form.cover_url} alt="" className="w-full h-full object-cover" onClick={() => setViewPhoto(form.cover_url)} />}
-            <label className="absolute right-3 bottom-3 bg-black/60 rounded-full px-3 py-2 text-sm">
-              📷 Cover
-              <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && upload(e.target.files[0], 'covers', 'cover_url')} />
-            </label>
-            {form.cover_url && (
-              <button type="button" onClick={() => removePhoto('cover_url')} className="absolute right-3 top-3 bg-black/60 rounded-full px-3 py-1 text-sm">Delete cover</button>
-            )}
+          <div className="h-28 bg-gradient-to-r from-sky-600 to-violet-600">
+            {form.cover_url && <img src={form.cover_url} alt="" className="w-full h-full object-cover" />}
           </div>
-          <div className="px-6 pb-6">
-            <div className="relative w-28 h-28 -mt-12 rounded-full border-4 border-slate-950 bg-slate-800 overflow-hidden">
-              {form.avatar_url ? <img src={form.avatar_url} alt="" className="w-full h-full object-cover" onClick={() => setViewPhoto(form.avatar_url)} /> : null}
-              <label className="absolute right-1 bottom-1 bg-sky-500 rounded-full w-8 h-8 flex items-center justify-center text-sm">
-                📷
-                <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && upload(e.target.files[0], 'avatars', 'avatar_url')} />
-              </label>
+          <div className="px-6 pb-6 -mt-12">
+            <div className="w-24 h-24 rounded-full border-4 border-slate-950 bg-white/10 overflow-hidden">
+              {form.avatar_url ? <img src={form.avatar_url} alt="" className="w-full h-full object-cover" /> : null}
             </div>
-            <h1 className="mt-4 text-3xl font-bold">{form.display_name || form.full_name || email}</h1>
+            <h1 className="mt-4 text-3xl font-bold">{shownName}</h1>
+            {form.username && <p className="text-slate-400">@{form.username}</p>}
             <p className="text-sm text-slate-500">{email}</p>
-            {form.avatar_url && <button type="button" onClick={() => removePhoto('avatar_url')} className="mt-2 text-sm text-red-400">Remove profile photo</button>}
+            <p className="mt-3 text-slate-300">{form.bio}</p>
+            <p className="mt-2 text-sm text-slate-400">
+              {[form.current_city, form.hometown, form.workplace, form.school].filter(Boolean).join(' · ')}
+            </p>
           </div>
         </div>
 
-        <form onSubmit={save} className="mt-6 space-y-3">
+        <h2 className="mt-8 text-xl font-bold">Your Echoes</h2>
+        <div className="mt-3 space-y-3">
+          {echoes.length === 0 && <p className="text-slate-400">No Echoes on your profile yet.</p>}
+          {echoes.map(echo => (
+            <div key={echo.id} className="rounded-2xl bg-white/5 p-4">
+              <p className="whitespace-pre-wrap">{echo.content}</p>
+              <p className="mt-2 text-sm text-slate-400">{echo.status} · {new Date(echo.scheduled_at).toLocaleString()}</p>
+            </div>
+          ))}
+        </div>
+
+        <h2 className="mt-8 text-xl font-bold">Edit profile</h2>
+        <form onSubmit={save} className="mt-3 space-y-3">
+          <input type="file" accept="image/*" onChange={e => e.target.files && uploadPhoto(e.target.files[0])} />
           <input value={form.full_name} onChange={e => setField('full_name', e.target.value)} placeholder="Full name" className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
           <input value={form.display_name} onChange={e => setField('display_name', e.target.value)} placeholder="Display name" className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
+          <input value={form.username} onChange={e => setField('username', e.target.value)} placeholder="Username" className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
           <textarea value={form.bio} onChange={e => setField('bio', e.target.value)} placeholder="Bio" rows={3} className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
-          <div>
-            <label className="block mb-1 text-sm text-slate-400">Date of birth</label>
-            <input type="date" value={form.date_of_birth} onChange={e => setField('date_of_birth', e.target.value)} className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
-          </div>
-          <SuggestBox label="Hometown" value={form.hometown} onChange={(v: string) => setField('hometown', v)} options={PLACES} placeholder="Type a city or country" />
-          <SuggestBox label="Current city" value={form.current_city} onChange={(v: string) => setField('current_city', v)} options={PLACES} placeholder="Type a city or country" />
-          <SuggestBox label="Workplace" value={form.workplace} onChange={(v: string) => setField('workplace', v)} options={WORKPLACES} placeholder="Company or job" />
-          <SuggestBox label="School" value={form.school} onChange={(v: string) => setField('school', v)} options={SCHOOLS} placeholder="School" />
-          <div>
-            <label className="block mb-1 text-sm text-slate-400">Gender</label>
-            <select value={form.gender} onChange={e => setField('gender', e.target.value)} className="w-full px-4 py-3 rounded-2xl bg-slate-900 outline-none">
-              <option value="">Select gender</option>
-              {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block mb-1 text-sm text-slate-400">Relationship status</label>
-            <select value={form.relationship_status} onChange={e => setField('relationship_status', e.target.value)} className="w-full px-4 py-3 rounded-2xl bg-slate-900 outline-none">
-              <option value="">Select status</option>
-              {RELATIONSHIPS.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
+          <input type="date" value={form.date_of_birth} onChange={e => setField('date_of_birth', e.target.value)} className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
+          <input value={form.hometown} onChange={e => setField('hometown', e.target.value)} placeholder="Hometown" className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
+          <input value={form.current_city} onChange={e => setField('current_city', e.target.value)} placeholder="Current city" className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
+          <input value={form.workplace} onChange={e => setField('workplace', e.target.value)} placeholder="Workplace" className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
+          <input value={form.school} onChange={e => setField('school', e.target.value)} placeholder="School" className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
+          <input value={form.gender} onChange={e => setField('gender', e.target.value)} placeholder="Gender" className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
+          <input value={form.relationship_status} onChange={e => setField('relationship_status', e.target.value)} placeholder="Relationship status" className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
           <input value={form.website} onChange={e => setField('website', e.target.value)} placeholder="Website" className="w-full px-4 py-3 rounded-2xl bg-white/10 outline-none" />
           <button className="w-full py-3 rounded-2xl bg-sky-500 font-semibold">Save profile</button>
         </form>
       </div>
-
-      {viewPhoto && (
-        <div onClick={() => setViewPhoto('')} className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
-          <img src={viewPhoto} alt="" className="max-w-full max-h-full rounded-2xl" />
-        </div>
-      )}
     </div>
   );
 }
