@@ -128,7 +128,7 @@ export default function FriendsPage() {
                 <p>{other}</p>
                 <div className="mt-2 flex gap-4 text-sm">
                   <Link href="/chat" className="text-[#0866ff]">Message</Link>
-                  <Link href="/people" className="text-[#0866ff]">Profile</Link>
+                  <Link href={`/people?email=${encodeURIComponent(other)}`} className="text-[#0866ff]">Profile</Link>
                   <button onClick={() => remove(item.id)} className="text-red-400">Unfriend</button>
                 </div>
               </div>
