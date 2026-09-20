@@ -46,6 +46,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
+  const [viewPhoto, setViewPhoto] = useState('');
   const [form, setForm] = useState({
     username: '', full_name: '', display_name: '', bio: '', avatar_url: '', cover_url: '',
     date_of_birth: '', hometown: '', current_city: '', workplace: '', school: '',
@@ -141,7 +142,7 @@ export default function ProfilePage() {
         <Link href="/home" className="text-sky-400 text-sm">← Home</Link>
         <div className="mt-6 rounded-3xl bg-white/5 overflow-hidden">
           <div className="relative h-36 bg-gradient-to-r from-sky-600 to-violet-600">
-            {form.cover_url && <img src={form.cover_url} alt="" className="w-full h-full object-cover" />}
+            {form.cover_url && <img src={form.cover_url} alt="" className="w-full h-full object-cover" onClick={() => setViewPhoto(form.cover_url)} />}
             <label className="absolute right-3 bottom-3 bg-black/60 rounded-full px-3 py-2 text-sm">
               📷 Cover
               <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && upload(e.target.files[0], 'covers', 'cover_url')} />
@@ -152,7 +153,7 @@ export default function ProfilePage() {
           </div>
           <div className="px-6 pb-6">
             <div className="relative w-28 h-28 -mt-12 rounded-full border-4 border-slate-950 bg-slate-800 overflow-hidden">
-              {form.avatar_url ? <img src={form.avatar_url} alt="" className="w-full h-full object-cover" /> : null}
+              {form.avatar_url ? <img src={form.avatar_url} alt="" className="w-full h-full object-cover" onClick={() => setViewPhoto(form.avatar_url)} /> : null}
               <label className="absolute right-1 bottom-1 bg-sky-500 rounded-full w-8 h-8 flex items-center justify-center text-sm">
                 📷
                 <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && upload(e.target.files[0], 'avatars', 'avatar_url')} />
@@ -194,6 +195,12 @@ export default function ProfilePage() {
           <button className="w-full py-3 rounded-2xl bg-sky-500 font-semibold">Save profile</button>
         </form>
       </div>
+
+      {viewPhoto && (
+        <div onClick={() => setViewPhoto('')} className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
+          <img src={viewPhoto} alt="" className="max-w-full max-h-full rounded-2xl" />
+        </div>
+      )}
     </div>
   );
 }
