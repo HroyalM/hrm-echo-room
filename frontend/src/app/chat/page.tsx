@@ -8,33 +8,25 @@ import Link from 'next/link';
 
 type Friend = { email: string; name: string; bio?: string; avatar?: string };
 type Message = {
-  id: string;
-  sender_id: string;
-  receiver_email: string;
-  content: string;
-  created_at: string;
-  liked?: boolean;
-  edited?: boolean;
+  id: string; sender_id: string; receiver_email: string; content: string;
+  created_at: string; liked?: boolean; edited?: boolean; media_url?: string | null; media_type?: string | null;
 };
 
 export default function ChatPage() {
   const router = useRouter();
-  const endRef = useRef<HTMLDivElement>(null);
-  const pressTimer = useRef<number | null>(null);
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunks = useRef<Blob[]>([]);
   const [userId, setUserId] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [friends, setFriends] = useState<Friend[]>([]);
   const [active, setActive] = useState<Friend | null>(null);
-  const [showProfile, setShowProfile] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
+  const [recording, setRecording] = useState(false);
   const [menu, setMenu] = useState<Message | null>(null);
-  const [editing, setEditing] = useState<Message | null>(null);
 
   const loadFriends = async (id: string, myEmail: string) => {
     const { data } = await supabase.from('friendships').select('requester_id, addressee_email, addressee_id, status').eq('status', 'accepted');
-    const otherIds = (data || []).map(row => row.requester_id === id ? row.addressee_id : row.requester_id).filter(Boolean);
-    const emails = (data || []).map(row => row.addressee_email);
     const { data: profiles } = await supabase.from('profiles').select('id, email, display_name, bio, avatar_url');
     const list: Friend[] = [];
     for (const row of data || []) {
@@ -42,28 +34,17 @@ export default function ChatPage() {
         ? (profiles || []).find(p => p.email === row.addressee_email || p.id === row.addressee_id)
         : (profiles || []).find(p => p.id === row.requester_id);
       const email = profile?.email || (row.addressee_email !== myEmail ? row.addressee_email : '');
-      if (email && email !== myEmail) {
-        list.push({
-          email,
-          name: profile?.display_name || email,
-          bio: profile?.bio || '',
-          avatar: profile?.avatar_url || '',
-        });
-      }
+      if (email && email !== myEmail) list.push({ email, name: profile?.display_name || email, bio: profile?.bio || '', avatar: profile?.avatar_url || '' });
     }
     setFriends(list);
   };
 
   const loadMessages = async (myEmail: string, friendEmail: string) => {
-    const { data } = await supabase
-      .from('messages')
-      .select('id, sender_id, receiver_email, content, created_at, liked, edited')
+    const { data } = await supabase.from('messages')
+      .select('id, sender_id, receiver_email, content, created_at, liked, edited, media_url, media_type')
       .or(`receiver_email.eq.${friendEmail},receiver_email.eq.${myEmail}`)
-      .order('created_at', { ascending: true })
-      .limit(100);
-    setMessages((data || []).filter(m =>
-      m.receiver_email === friendEmail || m.receiver_email === myEmail
-    ));
+      .order('created_at').limit(100);
+    setMessages((data || []).filter(m => m.receiver_email === friendEmail || m.receiver_email === myEmail));
   };
 
   useEffect(() => {
@@ -77,161 +58,85 @@ export default function ChatPage() {
     });
   }, [router]);
 
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, active]);
-
-  const send = async (e: React.FormEvent) => {
+  const sendText = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!active || !text.trim()) return;
-    if (editing) {
-      const { error } = await supabase.from('messages').update({ content: text, edited: true }).eq('id', editing.id);
-      if (error) toast.error(error.message);
-      else {
-        setEditing(null);
-        setText('');
-        loadMessages(userEmail, active.email);
-      }
-      return;
-    }
-    const { error } = await supabase.from('messages').insert({
-      sender_id: userId,
-      receiver_email: active.email,
-      content: text.trim(),
-    });
+    const { error } = await supabase.from('messages').insert({ sender_id: userId, receiver_email: active.email, content: text.trim() });
     if (error) toast.error(error.message);
-    else {
-      setText('');
-      loadMessages(userEmail, active.email);
-    }
+    else { setText(''); loadMessages(userEmail, active.email); }
   };
 
-  const like = async (m: Message) => {
-    await supabase.from('messages').update({ liked: !m.liked }).eq('id', m.id);
-    setMenu(null);
-    if (active) loadMessages(userEmail, active.email);
+  const sendFile = async (file: File, type: string) => {
+    if (!active) return;
+    const path = `${userId}/${Date.now()}-${file.name}`;
+    const { error } = await supabase.storage.from('chat-media').upload(path, file);
+    if (error) { toast.error(error.message); return; }
+    const { data } = supabase.storage.from('chat-media').getPublicUrl(path);
+    await supabase.from('messages').insert({
+      sender_id: userId, receiver_email: active.email, content: type === 'audio' ? 'Voice note' : 'Photo',
+      media_url: data.publicUrl, media_type: type,
+    });
+    loadMessages(userEmail, active.email);
   };
 
-  const remove = async (m: Message) => {
-    if (!confirm('Delete this message?')) return;
-    await supabase.from('messages').delete().eq('id', m.id);
-    setMenu(null);
-    if (active) loadMessages(userEmail, active.email);
+  const startRec = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const rec = new MediaRecorder(stream);
+    chunks.current = [];
+    rec.ondataavailable = e => chunks.current.push(e.data);
+    rec.onstop = async () => {
+      const blob = new Blob(chunks.current, { type: 'audio/webm' });
+      await sendFile(new File([blob], 'voice.webm', { type: 'audio/webm' }), 'audio');
+      stream.getTracks().forEach(t => t.stop());
+    };
+    recRef.current = rec;
+    rec.start();
+    setRecording(true);
   };
 
-  const startPress = (m: Message) => {
-    pressTimer.current = window.setTimeout(() => setMenu(m), 400);
-  };
-  const endPress = () => {
-    if (pressTimer.current) window.clearTimeout(pressTimer.current);
+  const stopRec = () => {
+    recRef.current?.stop();
+    setRecording(false);
   };
 
   return (
     <div className="min-h-screen bg-[#0b141a] text-white">
       <div className="max-w-xl mx-auto min-h-screen flex flex-col">
         <div className="px-4 py-3 flex items-center gap-3 bg-[#202c33]">
-          {active ? (
-            <button onClick={() => { setActive(null); setShowProfile(false); setMenu(null); }}>←</button>
-          ) : (
-            <Link href="/home">←</Link>
-          )}
-          {active && (
-            <button onClick={() => setShowProfile(true)} className="w-10 h-10 rounded-full bg-white/10 overflow-hidden">
-              {active.avatar ? <img src={active.avatar} className="w-full h-full object-cover" alt="" /> : '🙂'}
-            </button>
-          )}
-          <button onClick={() => active && setShowProfile(true)} className="flex-1 text-left">
-            <p className="font-semibold">{active ? active.name : 'Chats'}</p>
-            {active && <p className="text-xs text-slate-400">tap for profile</p>}
-          </button>
+          {active ? <button onClick={() => setActive(null)}>←</button> : <Link href="/home">←</Link>}
+          <p className="font-semibold">{active ? active.name : 'Chats'}</p>
+          {active && <Link href={`/echoes/create?to=${encodeURIComponent(active.email)}`} className="ml-auto text-sm text-sky-400">Send Echo</Link>}
         </div>
 
-        {showProfile && active && (
-          <div className="p-6">
-            <div className="w-24 h-24 rounded-full bg-white/10 overflow-hidden">
-              {active.avatar && <img src={active.avatar} className="w-full h-full object-cover" alt="" />}
-            </div>
-            <h2 className="mt-4 text-2xl font-bold">{active.name}</h2>
-            <p className="text-slate-400">{active.email}</p>
-            <p className="mt-3">{active.bio || 'No bio yet'}</p>
-            <button onClick={() => setShowProfile(false)} className="mt-6 px-4 py-2 rounded-full bg-[#00a884]">Open chat</button>
-          </div>
-        )}
-
-        {!showProfile && !active && (
+        {!active && (
           <div className="p-2">
-            {friends.length === 0 && <p className="p-4 text-slate-400">Accept a friend first to chat.</p>}
             {friends.map(friend => (
-              <button key={friend.email} onClick={() => { setActive(friend); loadMessages(userEmail, friend.email); }}
-                className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 text-left">
-                <div className="w-12 h-12 rounded-full bg-white/10 overflow-hidden">
-                  {friend.avatar && <img src={friend.avatar} className="w-full h-full object-cover" alt="" />}
-                </div>
-                <div>
-                  <p className="font-semibold">{friend.name}</p>
-                  <p className="text-sm text-slate-400">Tap to chat</p>
-                </div>
+              <button key={friend.email} onClick={() => { setActive(friend); loadMessages(userEmail, friend.email); }} className="w-full flex items-center gap-3 p-3 text-left">
+                <div className="w-12 h-12 rounded-full bg-white/10 overflow-hidden">{friend.avatar && <img src={friend.avatar} className="w-full h-full object-cover" alt="" />}</div>
+                <p className="font-semibold">{friend.name}</p>
               </button>
             ))}
           </div>
         )}
 
-        {!showProfile && active && (
+        {active && (
           <>
-            <div className="flex-1 p-3 space-y-2 overflow-y-auto">
-              {messages.map(m => {
-                const mine = m.sender_id === userId;
-                return (
-                  <div key={m.id} className={`max-w-[80%] ${mine ? 'ml-auto' : ''}`}>
-                    <button
-                      onContextMenu={e => { e.preventDefault(); setMenu(m); }}
-                      onTouchStart={() => startPress(m)}
-                      onTouchEnd={endPress}
-                      onMouseDown={() => startPress(m)}
-                      onMouseUp={endPress}
-                      className={`text-left px-3 py-2 rounded-2xl ${mine ? 'bg-[#005c4b] rounded-br-sm' : 'bg-[#202c33] rounded-bl-sm'}`}
-                    >
-                      <p>{m.content}</p>
-                      <p className="mt-1 text-[10px] text-white/60">
-                        {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        {m.edited ? ' · edited' : ''}
-                        {m.liked ? ' · ♥' : ''}
-                      </p>
-                    </button>
-                  </div>
-                );
-              })}
-              <div ref={endRef} />
+            <div className="flex-1 p-3 space-y-2">
+              {messages.map(m => (
+                <div key={m.id} className={`max-w-[80%] p-3 rounded-2xl ${m.sender_id === userId ? 'bg-[#005c4b] ml-auto' : 'bg-[#202c33]'}`} onContextMenu={e => { e.preventDefault(); setMenu(m); }}>
+                  {m.media_type === 'image' && m.media_url && <img src={m.media_url} alt="" className="rounded-xl max-h-60 mb-2" />}
+                  {m.media_type === 'audio' && m.media_url && <audio controls src={m.media_url} className="w-full" />}
+                  <p>{m.content}</p>
+                </div>
+              ))}
             </div>
-
-            <form onSubmit={send} className="p-3 flex gap-2 bg-[#202c33]">
-              <input
-                required
-                value={text}
-                onChange={e => setText(e.target.value)}
-                placeholder={editing ? 'Edit message' : 'Message'}
-                className="flex-1 px-4 py-3 rounded-full bg-[#2a3942] outline-none"
-              />
-              <button className="px-4 py-3 rounded-full bg-[#00a884]">{editing ? 'Save' : 'Send'}</button>
+            <form onSubmit={sendText} className="p-3 flex items-center gap-2 bg-[#202c33]">
+              <label className="px-2">📷<input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && sendFile(e.target.files[0], 'image')} /></label>
+              <button type="button" onClick={recording ? stopRec : startRec}>{recording ? '⏹' : '🎤'}</button>
+              <input value={text} onChange={e => setText(e.target.value)} placeholder="Message" className="flex-1 px-4 py-3 rounded-full bg-[#2a3942] outline-none" />
+              <button className="px-4 py-3 rounded-full bg-[#00a884]">Send</button>
             </form>
           </>
-        )}
-
-        {menu && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setMenu(null)}>
-            <div className="w-full bg-[#202c33] rounded-t-3xl p-4" onClick={e => e.stopPropagation()}>
-              <p className="text-sm text-slate-400 mb-3">{menu.content.slice(0, 60)}</p>
-              <button onClick={() => like(menu)} className="block w-full text-left py-3">♥ Like</button>
-              <button onClick={() => { navigator.clipboard.writeText(menu.content); toast.success('Copied'); setMenu(null); }} className="block w-full text-left py-3">Copy</button>
-              {menu.sender_id === userId && (
-                <>
-                  <button onClick={() => { setEditing(menu); setText(menu.content); setMenu(null); }} className="block w-full text-left py-3">Edit</button>
-                  <button onClick={() => remove(menu)} className="block w-full text-left py-3 text-red-400">Delete</button>
-                </>
-              )}
-              <button onClick={() => setMenu(null)} className="block w-full text-left py-3">Cancel</button>
-            </div>
-          </div>
         )}
       </div>
     </div>
