@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
+import AppChrome from '@/components/AppChrome';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -12,7 +13,6 @@ export default function ProfilePage() {
   const [userId, setUserId] = useState('');
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [viewPhoto, setViewPhoto] = useState('');
   const [echoes, setEchoes] = useState<{ id: string; content: string; scheduled_at: string; status: string }[]>([]);
   const [form, setForm] = useState({
     username: '', full_name: '', display_name: '', bio: '', avatar_url: '', cover_url: '',
@@ -71,16 +71,11 @@ export default function ProfilePage() {
   const name = form.display_name || form.full_name || form.username || 'Add your name';
 
   return (
-    <div className="min-h-screen bg-[#18191a] text-white pb-10">
-      <div className="max-w-xl mx-auto bg-[#242526] min-h-screen">
-        <div className="px-4 py-3 flex items-center justify-between border-b border-white/10">
-          <Link href="/home">← Home</Link>
-          <button onClick={logout} className="text-red-400">Log out</button>
-        </div>
-
+    <AppChrome avatar={form.avatar_url}>
+      <div className="max-w-xl mx-auto bg-[#242526] min-h-screen pb-8">
         <div className="relative">
-          <div className="h-48 bg-gradient-to-r from-blue-700 to-indigo-700">
-            {form.cover_url && <img src={form.cover_url} className="w-full h-full object-cover" onClick={() => setViewPhoto(form.cover_url)} alt="" />}
+          <div className="h-44 bg-gradient-to-r from-blue-700 to-indigo-700">
+            {form.cover_url && <img src={form.cover_url} className="w-full h-full object-cover" alt="" />}
           </div>
           <label className="absolute right-3 top-3 bg-black/60 rounded-full px-3 py-2 text-sm">
             Add cover
@@ -88,7 +83,7 @@ export default function ProfilePage() {
           </label>
           <div className="absolute left-4 -bottom-12">
             <div className="relative w-28 h-28 rounded-full border-4 border-[#242526] bg-slate-700 overflow-hidden">
-              {form.avatar_url ? <img src={form.avatar_url} className="w-full h-full object-cover" onClick={() => setViewPhoto(form.avatar_url)} alt="" /> : null}
+              {form.avatar_url ? <img src={form.avatar_url} className="w-full h-full object-cover" alt="" /> : null}
               <label className="absolute right-0 bottom-0 bg-blue-600 w-8 h-8 rounded-full flex items-center justify-center text-sm">
                 +
                 <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && upload(e.target.files[0], 'avatars', 'avatar_url')} />
@@ -101,12 +96,10 @@ export default function ProfilePage() {
           <h1 className="text-3xl font-bold">{name}</h1>
           {form.username && <p className="text-slate-400">@{form.username}</p>}
           {form.bio && <p className="mt-2">{form.bio}</p>}
-
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <Link href="/echoes/create" className="text-center py-2 rounded-lg bg-blue-600 font-semibold">Create Echo</Link>
-            <button onClick={() => setEditing(!editing)} className="py-2 rounded-lg bg-white/10 font-semibold">
-              {editing ? 'Close' : 'Edit profile'}
-            </button>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <Link href="/echoes/create" className="text-center py-2 rounded-lg bg-blue-600 font-semibold">Create</Link>
+            <button onClick={() => setEditing(!editing)} className="py-2 rounded-lg bg-white/10 font-semibold">{editing ? 'Close' : 'Edit'}</button>
+            <Link href="/settings" className="text-center py-2 rounded-lg bg-white/10 font-semibold">Settings</Link>
           </div>
         </div>
 
@@ -116,8 +109,6 @@ export default function ProfilePage() {
           {form.hometown && <p className="mt-1 text-sm">From {form.hometown}</p>}
           {form.workplace && <p className="mt-1 text-sm">Works at {form.workplace}</p>}
           {form.school && <p className="mt-1 text-sm">Studied at {form.school}</p>}
-          {form.relationship_status && <p className="mt-1 text-sm">{form.relationship_status}</p>}
-          {!form.current_city && !form.hometown && !form.workplace && <p className="mt-2 text-sm text-slate-400">Add details in Edit profile.</p>}
         </div>
 
         {editing && (
@@ -130,14 +121,8 @@ export default function ProfilePage() {
             <input type="date" value={form.date_of_birth} onChange={e => setField('date_of_birth', e.target.value)} className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none" />
             <input value={form.hometown} onChange={e => setField('hometown', e.target.value)} placeholder="Hometown" className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none" />
             <input value={form.current_city} onChange={e => setField('current_city', e.target.value)} placeholder="Current city" className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none" />
-            <input value={form.workplace} onChange={e => setField('workplace', e.target.value)} placeholder="Workplace" className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none" />
-            <input value={form.school} onChange={e => setField('school', e.target.value)} placeholder="School" className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none" />
-            <select value={form.email_visibility} onChange={e => setField('email_visibility', e.target.value)} className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none">
-              <option value="private">Email: only me</option>
-              <option value="friends">Email: friends</option>
-              <option value="public">Email: public</option>
-            </select>
             <button onClick={save} className="w-full py-3 rounded-xl bg-blue-600 font-semibold">Save</button>
+            <button onClick={logout} className="w-full py-3 rounded-xl text-red-400">Log out</button>
           </div>
         )}
 
@@ -147,19 +132,13 @@ export default function ProfilePage() {
             {echoes.map(echo => (
               <div key={echo.id} className="rounded-xl bg-[#3a3b3c] p-4">
                 <p className="font-semibold">{name}</p>
-                <p className="text-xs text-slate-400">{new Date(echo.scheduled_at).toLocaleString()}</p>
+                <p className="text-xs text-slate-400">{echo.status} · {new Date(echo.scheduled_at).toLocaleString()}</p>
                 <p className="mt-2">{echo.content}</p>
               </div>
             ))}
           </div>
         </div>
       </div>
-
-      {viewPhoto && (
-        <div onClick={() => setViewPhoto('')} className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
-          <img src={viewPhoto} className="max-w-full max-h-full" alt="" />
-        </div>
-      )}
-    </div>
+    </AppChrome>
   );
 }
