@@ -42,44 +42,52 @@ export default function FriendsPage() {
 
   const sendRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (email.toLowerCase() === userEmail.toLowerCase()) {
+      toast.error('You cannot add yourself');
+      return;
+    }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', email)
-      .maybeSingle();
+    const existing = items.find(i =>
+      i.addressee_email.toLowerCase() === email.toLowerCase() ||
+      (i.requester_id !== userId && i.addressee_email.toLowerCase() === userEmail.toLowerCase())
+    );
 
+    const already = items.find(i =>
+      i.status === 'accepted' && (
+        i.addressee_email.toLowerCase() === email.toLowerCase() ||
+        i.addressee_email.toLowerCase() === userEmail.toLowerCase()
+      )
+    );
+    if (already) {
+      toast.error('You are already friends');
+      return;
+    }
+
+    const pending = items.find(i =>
+      i.status === 'pending' && i.addressee_email.toLowerCase() === email.toLowerCase()
+    );
+    if (pending) {
+      toast.error('Request already sent');
+      return;
+    }
+
+    const { data: profile } = await supabase.from('profiles').select('id').eq('email', email).maybeSingle();
     const { error } = await supabase.from('friendships').insert({
       requester_id: userId,
       addressee_email: email,
       addressee_id: profile?.id || null,
       status: 'pending',
     });
-
-    if (error) {
-      toast.error(error.message);
-      return;
+    if (error) toast.error(error.message);
+    else {
+      toast.success('Request sent');
+      setEmail('');
+      load(userId, userEmail);
     }
-
-    if (profile?.id) {
-      await supabase.from('notifications').insert({
-        user_id: profile.id,
-        type: 'friend_request',
-        title: 'New friend request',
-        body: `${userEmail} wants to be your friend`,
-      });
-    }
-
-    setEmail('');
-    toast.success('Request sent');
-    load(userId, userEmail);
   };
 
   const accept = async (id: string) => {
-    const { error } = await supabase
-      .from('friendships')
-      .update({ status: 'accepted', addressee_id: userId })
-      .eq('id', id);
+    const { error } = await supabase.from('friendships').update({ status: 'accepted', addressee_id: userId }).eq('id', id);
     if (error) toast.error(error.message);
     else load(userId, userEmail);
   };
@@ -89,28 +97,31 @@ export default function FriendsPage() {
       <div className="max-w-xl mx-auto">
         <Link href="/home" className="text-sky-400 text-sm">← Back</Link>
         <h1 className="mt-4 text-3xl font-bold">Friends</h1>
-
         <form onSubmit={sendRequest} className="mt-6 flex gap-2">
-          <input required type="email" value={email} onChange={e => setEmail(e.target.value)}
-            placeholder="Friend's email"
+          <input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Friend's email"
             className="flex-1 px-4 py-3 rounded-2xl bg-white/10 outline-none" />
           <button className="px-4 py-3 rounded-2xl bg-sky-500 font-semibold">Add</button>
         </form>
-
         <div className="mt-8 space-y-3">
-          {items.map(item => (
-            <div key={item.id} className="rounded-2xl bg-white/5 p-4 flex items-center justify-between">
-              <div>
-                <p>{item.addressee_email}</p>
+          {items.map(item => {
+            const other = item.requester_id === userId ? item.addressee_email : item.addressee_email;
+            return (
+              <div key={item.id} className="rounded-2xl bg-white/5 p-4">
+                <p>{other}</p>
                 <p className="text-sm text-slate-400">{item.status}</p>
+                <div className="mt-2 flex gap-3 text-sm">
+                  {item.status === 'pending' && item.requester_id !== userId && (
+                    <button onClick={() => accept(item.id)} className="text-sky-400">Accept</button>
+                  )}
+                  {item.status === 'accepted' && (
+                    <Link href={`/chat?email=${encodeURIComponent(item.requester_id === userId ? item.addressee_email : userEmail === item.addressee_email ? '' : item.addressee_email)}`} className="text-sky-400">
+                      Chat
+                    </Link>
+                  )}
+                </div>
               </div>
-              {item.status === 'pending' && item.requester_id !== userId && (
-                <button onClick={() => accept(item.id)} className="px-3 py-2 rounded-xl bg-sky-500 text-sm">
-                  Accept
-                </button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
