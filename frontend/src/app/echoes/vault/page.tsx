@@ -11,20 +11,17 @@ type Echo = {
   content: string;
   scheduled_at: string;
   status: string;
-  recipient_type: string;
-  recipient_emails: string[] | null;
 };
 
 export default function VaultPage() {
   const router = useRouter();
   const [echoes, setEchoes] = useState<Echo[]>([]);
   const [userId, setUserId] = useState('');
-  const [userEmail, setUserEmail] = useState('');
 
   const load = async (id: string) => {
     const { data } = await supabase
       .from('echoes')
-      .select('id, content, scheduled_at, status, recipient_type, recipient_emails')
+      .select('id, content, scheduled_at, status')
       .eq('sender_id', id)
       .order('scheduled_at', { ascending: true });
     setEchoes(data || []);
@@ -35,28 +32,13 @@ export default function VaultPage() {
       if (!data.user) router.push('/auth/login');
       else {
         setUserId(data.user.id);
-        setUserEmail(data.user.email || '');
         load(data.user.id);
       }
     });
   }, [router]);
 
-  const playSound = () => {
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = 880;
-    gain.gain.value = 0.08;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.25);
-  };
-
   const deleteEcho = async (id: string) => {
-    const ok = confirm('Delete this Echo?');
-    if (!ok) return;
+    if (!confirm('Delete this Echo?')) return;
     const { error } = await supabase.from('echoes').delete().eq('id', id);
     if (error) toast.error(error.message);
     else {
@@ -65,68 +47,37 @@ export default function VaultPage() {
     }
   };
 
-  const checkDeliveries = async () => {
-    const now = new Date().toISOString();
-    const due = echoes.filter(e => e.status === 'scheduled' && e.scheduled_at <= now);
+  const sealed = echoes.filter(e => e.status !== 'delivered');
+  const delivered = echoes.filter(e => e.status === 'delivered');
 
-    for (const echo of due) {
-      await supabase.from('echoes').update({
-        status: 'delivered',
-        delivered_at: now,
-      }).eq('id', echo.id);
-
-      await supabase.from('notifications').insert({
-        user_id: userId,
-        type: 'echo_delivered',
-        title: 'An Echo has arrived',
-        body: echo.content,
-        data: { echo_id: echo.id },
-      });
-
-      const to = echo.recipient_type === 'friend' && echo.recipient_emails?.[0]
-        ? echo.recipient_emails[0]
-        : userEmail;
-
-      await fetch('/api/send-echo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to,
-          subject: 'An Echo has arrived',
-          message: echo.content,
-        }),
-      });
-    }
-
-    if (due.length) playSound();
-    toast.success(due.length ? `${due.length} Echo(s) delivered` : 'No Echoes due yet');
-    load(userId);
-  };
+  const Card = ({ echo }: { echo: Echo }) => (
+    <div className="rounded-2xl bg-[#242526] p-5">
+      <p className="whitespace-pre-wrap">{echo.content}</p>
+      <p className="mt-3 text-sm text-slate-400">{new Date(echo.scheduled_at).toLocaleString()}</p>
+      <div className="mt-3 flex items-center justify-between">
+        <p className="text-sm text-sky-400">{echo.status === 'delivered' ? 'Delivered' : 'Sealed'}</p>
+        <button onClick={() => deleteEcho(echo.id)} className="text-sm text-red-400">Delete</button>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-6">
+    <div className="min-h-screen bg-[#18191a] text-white p-6">
       <div className="max-w-xl mx-auto">
-        <Link href="/home" className="text-sky-400 text-sm">← Back</Link>
-        <div className="mt-4 flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Echo Vault</h1>
-          <Link href="/echoes/create" className="text-sky-400 text-sm">+ New</Link>
+        <Link href="/home" className="text-sky-400 text-sm">← Home</Link>
+        <h1 className="mt-4 text-3xl font-bold">Echo Vault</h1>
+        <Link href="/echoes/create" className="inline-block mt-3 text-sky-400 text-sm">+ New Echo</Link>
+
+        <h2 className="mt-8 font-bold">Sealed</h2>
+        <div className="mt-3 space-y-3">
+          {sealed.length === 0 && <p className="text-slate-400">No sealed Echoes.</p>}
+          {sealed.map(echo => <Card key={echo.id} echo={echo} />)}
         </div>
-        <button onClick={checkDeliveries} className="mt-4 w-full py-3 rounded-2xl bg-sky-500 font-semibold">
-          Check deliveries
-        </button>
-        <div className="mt-8 space-y-4">
-          {echoes.map(echo => (
-            <div key={echo.id} className="rounded-3xl bg-white/5 border border-white/10 p-5">
-              <p className="whitespace-pre-wrap">{echo.content}</p>
-              <p className="mt-3 text-sm text-slate-400">Opens {new Date(echo.scheduled_at).toLocaleString()}</p>
-              <div className="mt-3 flex items-center justify-between">
-                <p className="text-sm text-sky-400">{echo.status}</p>
-                <button onClick={() => deleteEcho(echo.id)} className="text-sm text-red-400">
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
+
+        <h2 className="mt-8 font-bold">Delivered</h2>
+        <div className="mt-3 space-y-3">
+          {delivered.length === 0 && <p className="text-slate-400">No delivered Echoes.</p>}
+          {delivered.map(echo => <Card key={echo.id} echo={echo} />)}
         </div>
       </div>
     </div>
