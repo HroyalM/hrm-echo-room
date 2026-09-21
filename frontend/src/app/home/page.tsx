@@ -8,6 +8,7 @@ import Link from 'next/link';
 import AppChrome from '@/components/AppChrome';
 
 type Item = { id: string; kind: 'echo' | 'post'; content: string; created_at: string; owner: string; extra?: string };
+type Comment = { id: string; item_id: string; kind: string; content: string; created_at: string };
 
 const stories = [
   { href: '/friends', label: 'Friends', img: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=400&q=80' },
@@ -27,28 +28,27 @@ export default function HomePage() {
   const [privacy, setPrivacy] = useState('public');
   const [likes, setLikes] = useState<Record<string, number>>({});
   const [mine, setMine] = useState<Record<string, boolean>>({});
-  const [comments, setComments] = useState<Record<string, number>>({});
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [open, setOpen] = useState('');
+  const [draft, setDraft] = useState('');
 
   const keyOf = (item: Item) => item.kind + ':' + item.id;
 
   const loadSocial = async (id: string) => {
-    const { data: likeRows } = await supabase.from('feed_likes').select('item_id, kind, user_id');
-    const { data: commentRows } = await supabase.from('feed_comments').select('item_id, kind');
+    const [{ data: likeRows }, { data: commentRows }] = await Promise.all([
+      supabase.from('feed_likes').select('item_id, kind, user_id'),
+      supabase.from('feed_comments').select('id, item_id, kind, content, created_at').order('created_at'),
+    ]);
     const likeCount: Record<string, number> = {};
     const myLikes: Record<string, boolean> = {};
-    const commentCount: Record<string, number> = {};
     for (const row of likeRows || []) {
       const k = row.kind + ':' + row.item_id;
       likeCount[k] = (likeCount[k] || 0) + 1;
       if (row.user_id === id) myLikes[k] = true;
     }
-    for (const row of commentRows || []) {
-      const k = row.kind + ':' + row.item_id;
-      commentCount[k] = (commentCount[k] || 0) + 1;
-    }
     setLikes(likeCount);
     setMine(myLikes);
-    setComments(commentCount);
+    setComments((commentRows || []) as Comment[]);
   };
 
   const load = async (id: string) => {
@@ -57,12 +57,11 @@ export default function HomePage() {
       supabase.from('posts').select('id, content, created_at, author_id, privacy').order('created_at', { ascending: false }),
       supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', id).eq('read', false),
     ]);
-    const list = [
+    setUnread(count || 0);
+    setItems([
       ...(echoes || []).map(e => ({ id: e.id, kind: 'echo' as const, content: e.content, created_at: e.created_at, owner: e.sender_id, extra: e.status })),
       ...(posts || []).map(p => ({ id: p.id, kind: 'post' as const, content: p.content, created_at: p.created_at, owner: p.author_id, extra: p.privacy })),
-    ].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
-    setUnread(count || 0);
-    setItems(list);
+    ].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at)));
     loadSocial(id);
   };
 
@@ -95,15 +94,14 @@ export default function HomePage() {
     const k = keyOf(item);
     if (mine[k]) await supabase.from('feed_likes').delete().eq('user_id', userId).eq('item_id', item.id).eq('kind', item.kind);
     else await supabase.from('feed_likes').insert({ user_id: userId, item_id: item.id, kind: item.kind });
-    load(userId);
+    loadSocial(userId);
   };
 
-  const comment = async (item: Item) => {
-    const content = prompt('Write a comment');
-    if (!content) return;
-    const { error } = await supabase.from('feed_comments').insert({ user_id: userId, item_id: item.id, kind: item.kind, content });
+  const addComment = async (item: Item) => {
+    if (!draft.trim()) return;
+    const { error } = await supabase.from('feed_comments').insert({ user_id: userId, item_id: item.id, kind: item.kind, content: draft.trim() });
     if (error) toast.error(error.message);
-    else load(userId);
+    else { setDraft(''); loadSocial(userId); }
   };
 
   const first = name.includes('@') ? '' : name.split(' ')[0];
@@ -123,11 +121,7 @@ export default function HomePage() {
           {stories.map(s => (
             <Link key={s.href} href={s.href} className="shrink-0 w-[86px]">
               <div className="relative h-[148px] rounded-2xl overflow-hidden bg-black">
-                {s.img ? (
-                  <img src={s.img} alt={s.label} className="absolute inset-0 w-full h-full object-cover" />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-4xl">🔒</div>
-                )}
+                {s.img ? <img src={s.img} alt={s.label} className="absolute inset-0 w-full h-full object-cover" /> : <div className="absolute inset-0 flex items-center justify-center text-4xl">🔒</div>}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
                 <p className="absolute bottom-2 w-full text-center text-[11px] font-semibold">{s.label}</p>
               </div>
@@ -144,7 +138,6 @@ export default function HomePage() {
           </div>
           <div className="mt-3 flex justify-around items-center text-sm">
             <Link href="/echoes/create" className="flex items-center gap-2"><span className="w-6 h-6 rounded bg-red-600 text-white text-center text-xs leading-6">▶</span>Live Echo</Link>
-            <label className="flex items-center gap-2"><span className="w-6 h-6 rounded bg-green-600 text-white text-center text-xs leading-6">▣</span>Photo</label>
             <Link href="/people" className="flex items-center gap-2"><span className="w-6 h-6 rounded bg-blue-600 text-white text-center text-xs leading-6">☺</span>Tag</Link>
           </div>
           <div className="mt-3 flex items-center">
@@ -166,21 +159,34 @@ export default function HomePage() {
 
         {items.map(item => {
           const k = keyOf(item);
+          const itemComments = comments.filter(c => c.item_id === item.id && c.kind === item.kind);
           return (
             <article key={k} className="mx-3 mt-3 rounded-2xl bg-[#242526] p-4">
               <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full overflow-hidden bg-[#3a3b3c]">
+                <Link href="/profile" className="w-10 h-10 rounded-full overflow-hidden bg-[#3a3b3c]">
                   {avatar && <img src={avatar} className="w-full h-full object-cover" alt="" />}
-                </div>
+                </Link>
                 <div className="flex-1">
                   <p className="font-semibold">{name}</p>
                   <p className="text-xs text-slate-400">{item.kind} · {item.extra} · {new Date(item.created_at).toLocaleString()}</p>
                   <p className="mt-3 whitespace-pre-wrap">{item.content}</p>
                   <div className="mt-3 grid grid-cols-3 text-center text-sm">
                     <button onClick={() => like(item)} className={mine[k] ? 'text-blue-400' : 'text-slate-300'}>Like {likes[k] || 0}</button>
-                    <button onClick={() => comment(item)} className="text-slate-300">Comment {comments[k] || 0}</button>
+                    <button onClick={() => setOpen(open === k ? '' : k)} className="text-slate-300">Comment {itemComments.length}</button>
                     {item.owner === userId ? <button onClick={() => remove(item)} className="text-red-400">Delete</button> : <span>Share</span>}
                   </div>
+                  {open === k && (
+                    <div className="mt-3 space-y-2">
+                      {itemComments.map(c => (
+                        <p key={c.id} className="rounded-xl bg-[#3a3b3c] px-3 py-2 text-sm">{c.content}</p>
+                      ))}
+                      {itemComments.length === 0 && <p className="text-xs text-slate-400">No comments yet.</p>}
+                      <div className="flex gap-2">
+                        <input value={draft} onChange={e => setDraft(e.target.value)} placeholder="Write a comment" className="flex-1 px-3 py-2 rounded-full bg-[#3a3b3c] outline-none text-sm" />
+                        <button type="button" onClick={() => addComment(item)} className="px-3 py-2 rounded-full bg-[#0866ff] text-sm">Send</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </article>
