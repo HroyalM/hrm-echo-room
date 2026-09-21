@@ -7,7 +7,14 @@ import toast from 'react-hot-toast';
 import Link from 'next/link';
 import AppChrome from '@/components/AppChrome';
 
-type Item = { id: string; kind: 'echo' | 'post'; content: string; created_at: string; owner: string; extra?: string };
+type Item = {
+  id: string;
+  kind: 'echo' | 'post';
+  content: string;
+  created_at: string;
+  owner: string;
+  extra?: string;
+};
 
 export default function HomePage() {
   const router = useRouter();
@@ -57,37 +64,84 @@ export default function HomePage() {
     else load(userId);
   };
 
+  const first = name.includes('@') ? 'there' : name.split(' ')[0];
+
   return (
     <AppChrome avatar={avatar} unread={unread}>
-      <form onSubmit={createPost} className="m-3 rounded-2xl bg-[#242526] p-3">
-        <textarea required value={text} onChange={e => setText(e.target.value)} placeholder={`What's on your mind, ${name.split(' ')[0] || ''}?`} className="w-full bg-[#3a3b3c] rounded-2xl px-4 py-3 outline-none" />
-        <div className="mt-3 flex gap-2">
-          <select value={privacy} onChange={e => setPrivacy(e.target.value)} className="bg-[#3a3b3c] rounded-full px-3 py-2">
-            <option value="public">🌍 Public</option>
-            <option value="friends">👥 Friends</option>
-            <option value="private">🔒 Only me</option>
-          </select>
-          <button className="ml-auto px-5 py-2 rounded-full bg-[#0866ff] font-semibold">Post</button>
+      <div className="max-w-xl mx-auto pb-8">
+        <div className="flex gap-3 overflow-x-auto p-3">
+          <Link href="/echoes/create" className="shrink-0 w-24">
+            <div className="h-36 rounded-2xl bg-[#3a3b3c] flex items-end p-2 relative overflow-hidden">
+              {avatar && <img src={avatar} className="absolute inset-0 w-full h-full object-cover opacity-70" alt="" />}
+              <span className="relative text-xs font-semibold">+ Echo</span>
+            </div>
+          </Link>
+          <Link href="/friends" className="shrink-0 w-24 h-36 rounded-2xl bg-[#242526] p-3 flex flex-col justify-end text-xs">Friends</Link>
+          <Link href="/groups" className="shrink-0 w-24 h-36 rounded-2xl bg-[#242526] p-3 flex flex-col justify-end text-xs">Groups</Link>
+          <Link href="/echoes/vault" className="shrink-0 w-24 h-36 rounded-2xl bg-[#242526] p-3 flex flex-col justify-end text-xs">Vault</Link>
+          <Link href="/people" className="shrink-0 w-24 h-36 rounded-2xl bg-[#242526] p-3 flex flex-col justify-end text-xs">People</Link>
         </div>
-      </form>
 
-      <div className="mx-3 mb-3 grid grid-cols-4 gap-2 text-center text-xs">
-        <Link href="/friends" className="rounded-xl bg-[#242526] py-3">Friends</Link>
-        <Link href="/groups" className="rounded-xl bg-[#242526] py-3">Groups</Link>
-        <Link href="/echoes/vault" className="rounded-xl bg-[#242526] py-3">Vault</Link>
-        <Link href="/people" className="rounded-xl bg-[#242526] py-3">People</Link>
-      </div>
-
-      {items.map(item => (
-        <article key={item.kind + item.id} className="mx-3 mb-3 rounded-2xl bg-[#242526] p-4">
-          <div className="flex justify-between">
-            <p className="font-semibold">{name}</p>
-            {item.owner === userId && <button onClick={() => remove(item)} className="text-red-400 text-sm">Delete</button>}
+        <form onSubmit={createPost} className="mx-3 rounded-2xl bg-[#242526] p-3">
+          <div className="flex gap-3">
+            <Link href="/profile" className="w-10 h-10 rounded-full overflow-hidden bg-[#3a3b3c] shrink-0">
+              {avatar && <img src={avatar} className="w-full h-full object-cover" alt="" />}
+            </Link>
+            <textarea required value={text} onChange={e => setText(e.target.value)} placeholder={`What's on your mind, ${first}?`} className="flex-1 bg-[#3a3b3c] rounded-full px-4 py-3 outline-none resize-none min-h-12" />
           </div>
-          <p className="text-xs text-slate-400">{item.kind} · {item.extra}</p>
-          <p className="mt-2 whitespace-pre-wrap">{item.content}</p>
-        </article>
-      ))}
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+            <Link href="/echoes/create" className="py-2 rounded-lg bg-[#3a3b3c]">Live Echo</Link>
+            <label className="py-2 rounded-lg bg-[#3a3b3c]">Photo</label>
+            <Link href="/people" className="py-2 rounded-lg bg-[#3a3b3c]">Tag</Link>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <select value={privacy} onChange={e => setPrivacy(e.target.value)} className="bg-[#3a3b3c] rounded-full px-3 py-2 text-sm">
+              <option value="public">🌍 Public</option>
+              <option value="friends">👥 Friends</option>
+              <option value="private">🔒 Only me</option>
+            </select>
+            <button className="ml-auto px-5 py-2 rounded-full bg-[#0866ff] font-semibold">Post</button>
+          </div>
+        </form>
+
+        <div className="mx-3 mt-3 grid grid-cols-4 gap-2 text-center text-[11px]">
+          <Link href="/friends" className="rounded-xl bg-[#242526] py-3">👥<br />Friends</Link>
+          <Link href="/groups" className="rounded-xl bg-[#242526] py-3">👨‍👩‍👧‍👦<br />Groups</Link>
+          <Link href="/chat" className="rounded-xl bg-[#242526] py-3">💬<br />Chat</Link>
+          <Link href="/settings" className="rounded-xl bg-[#242526] py-3">⚙️<br />Settings</Link>
+        </div>
+
+        {items.length === 0 && <p className="p-8 text-center text-slate-400">Your feed is empty. Write a post or create an Echo.</p>}
+
+        {items.map(item => (
+          <article key={item.kind + item.id} className="mx-3 mt-3 rounded-2xl bg-[#242526] p-4">
+            <div className="flex gap-3">
+              <div className="w-10 h-10 rounded-full overflow-hidden bg-[#3a3b3c] shrink-0">
+                {avatar && <img src={avatar} className="w-full h-full object-cover" alt="" />}
+              </div>
+              <div className="flex-1">
+                <div className="flex justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{name}</p>
+                    <p className="text-xs text-slate-400">
+                      {item.kind === 'echo' ? 'Echo' : 'Post'} · {item.extra} · {new Date(item.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  {item.owner === userId && (
+                    <button onClick={() => remove(item)} className="text-slate-400">⋯</button>
+                  )}
+                </div>
+                <p className="mt-3 whitespace-pre-wrap">{item.content}</p>
+                <div className="mt-3 grid grid-cols-3 text-center text-sm text-slate-300">
+                  <span>Like</span>
+                  <span>Comment</span>
+                  {item.owner === userId ? <button onClick={() => remove(item)} className="text-red-400">Delete</button> : <span>Share</span>}
+                </div>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
     </AppChrome>
   );
 }
