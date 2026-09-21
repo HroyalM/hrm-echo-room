@@ -19,15 +19,17 @@ export default function ProfilePage() {
   const [comments, setComments] = useState<Record<string, number>>({});
   const [form, setForm] = useState({
     username: '', full_name: '', display_name: '', bio: '', avatar_url: '', cover_url: '',
-    date_of_birth: '', hometown: '', current_city: '', workplace: '', school: '',
-    gender: '', relationship_status: '',
+    hometown: '', current_city: '', workplace: '', school: '',
   });
   const setField = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
   const loadEchoes = async (id: string) => {
-    const { data } = await supabase.from('echoes').select('id, content, scheduled_at, status, privacy').eq('sender_id', id).order('created_at', { ascending: false });
-    const list = (data || []) as Echo[];
-    setEchoes(list);
+    const { data } = await supabase
+      .from('echoes')
+      .select('id, content, scheduled_at, status, privacy')
+      .eq('sender_id', id)
+      .order('created_at', { ascending: false });
+    setEchoes((data || []) as Echo[]);
     const { data: likeRows } = await supabase.from('feed_likes').select('item_id').eq('kind', 'echo');
     const { data: commentRows } = await supabase.from('feed_comments').select('item_id').eq('kind', 'echo');
     const likeCount: Record<string, number> = {};
@@ -47,9 +49,8 @@ export default function ProfilePage() {
       if (row) setForm({
         username: row.username || '', full_name: row.full_name || '', display_name: row.display_name || '',
         bio: row.bio || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '',
-        date_of_birth: row.date_of_birth || '', hometown: row.hometown || '', current_city: row.current_city || '',
-        workplace: row.workplace || '', school: row.school || '', gender: row.gender || '',
-        relationship_status: row.relationship_status || '',
+        hometown: row.hometown || '', current_city: row.current_city || '',
+        workplace: row.workplace || '', school: row.school || '',
       });
       loadEchoes(data.user.id);
     });
@@ -122,8 +123,12 @@ export default function ProfilePage() {
                 <p className="text-xs text-slate-400">{echo.status} · {echo.privacy || 'public'}</p>
                 <p className="mt-1">{echo.content}</p>
                 <p className="mt-2 text-xs text-slate-400">Like {likes[echo.id] || 0} · Comment {comments[echo.id] || 0}</p>
-                <div className="mt-3 flex gap-2 text-sm">
-                  <select value={echo.privacy || 'public'} onChange={e => setPrivacy(echo.id, e.target.value)} className="bg-[#3a3b3c] rounded-full px-3 py-1">
+                <div className="mt-3 flex items-center gap-3 text-sm">
+                  <select
+                    value={echo.privacy || 'public'}
+                    onChange={e => setPrivacy(echo.id, e.target.value)}
+                    className="bg-[#3a3b3c] rounded-full px-3 py-1"
+                  >
                     <option value="public">Public</option>
                     <option value="friends">Friends</option>
                     <option value="private">Only me</option>
