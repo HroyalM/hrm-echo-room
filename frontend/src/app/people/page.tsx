@@ -6,15 +6,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import AppChrome from '@/components/AppChrome';
 
-type Person = {
-  id: string;
-  email: string | null;
-  display_name: string | null;
-  username: string | null;
-  full_name: string | null;
-  bio: string | null;
-  avatar_url: string | null;
-};
+type Person = { id: string; email: string | null; display_name: string | null; username: string | null; full_name: string | null; bio: string | null; avatar_url: string | null };
 
 export default function PeoplePage() {
   const router = useRouter();
@@ -24,12 +16,12 @@ export default function PeoplePage() {
   const [active, setActive] = useState<Person | null>(null);
   const [status, setStatus] = useState('');
 
+  const label = (p: Person) => p.display_name || p.full_name || p.username || p.email || 'User';
+
   const open = async (person: Person, userId: string) => {
     setActive(person);
     const { data } = await supabase.from('friendships').select('status, requester_id, addressee_email, addressee_id');
-    const row = (data || []).find(r =>
-      r.addressee_email === person.email || r.addressee_id === person.id || r.requester_id === person.id
-    );
+    const row = (data || []).find(r => r.addressee_email === person.email || r.addressee_id === person.id || r.requester_id === person.id);
     setStatus(row?.status || '');
   };
 
@@ -37,7 +29,7 @@ export default function PeoplePage() {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { router.push('/auth/login'); return; }
       setMe(data.user.id);
-      const { data: mine } = await supabase.from('profiles').select('avatar_url').eq('id', data.user.id).single();
+      const { data: mine } = await supabase.from('profiles').select('avatar_url').eq('id', data.user.id).maybeSingle();
       setAvatar(mine?.avatar_url || '');
       const { data: rows, error } = await supabase.from('profiles').select('id, email, display_name, username, full_name, bio, avatar_url');
       if (error) toast.error(error.message);
@@ -53,17 +45,10 @@ export default function PeoplePage() {
 
   const add = async () => {
     if (!active) return;
-    const { error } = await supabase.from('friendships').insert({
-      requester_id: me,
-      addressee_email: active.email,
-      addressee_id: active.id,
-      status: 'pending',
-    });
+    const { error } = await supabase.from('friendships').insert({ requester_id: me, addressee_email: active.email, addressee_id: active.id, status: 'pending' });
     if (error) toast.error(error.message);
     else { toast.success('Request sent'); setStatus('pending'); }
   };
-
-  const label = (p: Person) => p.display_name || p.full_name || p.username || p.email || 'User';
 
   return (
     <AppChrome avatar={avatar}>
@@ -71,7 +56,7 @@ export default function PeoplePage() {
         {!active && (
           <>
             <h1 className="text-2xl font-bold">People you may know</h1>
-            {people.length === 0 && <p className="mt-6 text-slate-400">No other profiles loaded. Run the profiles SQL again if this stays empty.</p>}
+            {people.length === 0 && <p className="mt-6 text-slate-400">No other accounts yet.</p>}
             <div className="mt-4 space-y-2">
               {people.map(p => (
                 <button key={p.id} onClick={() => open(p, me)} className="w-full flex items-center gap-3 text-left p-4 rounded-2xl bg-[#242526]">
