@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 export default function AppChrome({
   children,
@@ -13,12 +13,18 @@ export default function AppChrome({
   unread?: number;
 }) {
   const path = usePathname();
+  const router = useRouter();
   const tab = (href: string) => path === href ? 'text-[#0866ff]' : 'text-slate-300';
 
   return (
     <div className="min-h-screen bg-[#18191a] text-white pb-16">
       <header className="sticky top-0 z-30 bg-[#242526] border-b border-white/10 px-3 py-2 flex items-center justify-between">
-        <Link href="/home" className="text-2xl font-bold text-[#0866ff]">echo</Link>
+        <div className="flex items-center gap-2">
+          {path !== '/home' && (
+            <button onClick={() => router.back()} className="w-10 h-10 rounded-full bg-[#3a3b3c]">←</button>
+          )}
+          <Link href="/home" className="text-2xl font-bold text-[#0866ff]">echo</Link>
+        </div>
         <div className="flex items-center gap-2">
           <Link href="/search" className="w-10 h-10 rounded-full bg-[#3a3b3c] flex items-center justify-center">⌕</Link>
           <Link href="/chat" className="w-10 h-10 rounded-full bg-[#3a3b3c] flex items-center justify-center">💬</Link>
