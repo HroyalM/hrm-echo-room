@@ -4,103 +4,104 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import Link from 'next/link';
 import AppChrome from '@/components/AppChrome';
 
-type Person = {
-  id: string; email: string; display_name: string | null; username: string | null;
-  bio: string | null; avatar_url: string | null; hometown: string | null; current_city: string | null;
-};
-
-export default function PeoplePage() {
+export default function ProfilePage() {
   const router = useRouter();
-  const [me, setMe] = useState('');
-  const [avatar, setAvatar] = useState('');
-  const [people, setPeople] = useState<Person[]>([]);
-  const [active, setActive] = useState<Person | null>(null);
-  const [status, setStatus] = useState('');
-  const [blocked, setBlocked] = useState(false);
-
-  const open = async (person: Person, userId: string) => {
-    setActive(person);
-    const { data } = await supabase.from('friendships').select('status, requester_id, addressee_email').or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
-    const row = (data || []).find(r => r.addressee_email === person.email || r.requester_id === person.id);
-    setStatus(row?.status || '');
-    const { data: b } = await supabase.from('blocks').select('id').eq('blocker_id', userId).eq('blocked_email', person.email).maybeSingle();
-    setBlocked(!!b);
-  };
+  const [userId, setUserId] = useState('');
+  const [email, setEmail] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [echoes, setEchoes] = useState<{ id: string; content: string; scheduled_at: string; status: string }[]>([]);
+  const [form, setForm] = useState({
+    username: '', full_name: '', display_name: '', bio: '', avatar_url: '', cover_url: '',
+    date_of_birth: '', hometown: '', current_city: '', workplace: '', school: '',
+    gender: '', relationship_status: '',
+  });
+  const setField = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { router.push('/auth/login'); return; }
-      setMe(data.user.id);
-      const { data: mine } = await supabase.from('profiles').select('avatar_url').eq('id', data.user.id).single();
-      setAvatar(mine?.avatar_url || '');
-      const { data: rows } = await supabase.from('profiles').select('id, email, display_name, username, bio, avatar_url, hometown, current_city');
-      const list = ((rows || []) as Person[]).filter(p => p.id !== data.user.id);
-      setPeople(list);
-      const email = new URLSearchParams(window.location.search).get('email');
-      if (email) {
-        const found = list.find(p => p.email === email);
-        if (found) open(found, data.user.id);
-      }
+      setUserId(data.user.id);
+      setEmail(data.user.email || '');
+      const { data: row } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
+      if (row) setForm({
+        username: row.username || '', full_name: row.full_name || '', display_name: row.display_name || '',
+        bio: row.bio || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '',
+        date_of_birth: row.date_of_birth || '', hometown: row.hometown || '', current_city: row.current_city || '',
+        workplace: row.workplace || '', school: row.school || '', gender: row.gender || '',
+        relationship_status: row.relationship_status || '',
+      });
+      const { data: echoData } = await supabase.from('echoes').select('id, content, scheduled_at, status').eq('sender_id', data.user.id).order('created_at', { ascending: false });
+      setEchoes(echoData || []);
     });
   }, [router]);
 
-  const add = async () => {
-    if (!active) return;
-    const { error } = await supabase.from('friendships').insert({
-      requester_id: me, addressee_email: active.email, addressee_id: active.id, status: 'pending',
-    });
+  const save = async () => {
+    const { error } = await supabase.from('profiles').update({
+      ...form,
+      display_name: form.display_name || form.full_name || form.username,
+    }).eq('id', userId);
     if (error) toast.error(error.message);
-    else { toast.success('Request sent'); setStatus('pending'); }
+    else { toast.success('Saved'); setEditing(false); }
   };
 
-  const block = async () => {
-    if (!active) return;
-    if (blocked) {
-      await supabase.from('blocks').delete().eq('blocker_id', me).eq('blocked_email', active.email);
-      setBlocked(false);
-    } else {
-      await supabase.from('blocks').insert({ blocker_id: me, blocked_email: active.email });
-      setBlocked(true);
-    }
-  };
+  const name = form.display_name || form.full_name || form.username || email;
 
   return (
-    <AppChrome avatar={avatar}>
-      <div className="max-w-xl mx-auto p-4">
-        {!active && (
-          <>
-            <h1 className="text-2xl font-bold">People</h1>
-            <div className="mt-4 space-y-2">
-              {people.map(p => (
-                <button key={p.id} onClick={() => open(p, me)} className="w-full text-left p-4 rounded-2xl bg-[#242526]">
-                  <p className="font-semibold">{p.display_name || p.username || 'User'}</p>
-                  <p className="text-sm text-slate-400">@{p.username || 'user'}</p>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
+    <AppChrome avatar={form.avatar_url}>
+      <div className="max-w-xl mx-auto pb-8">
+        <div className="h-40 bg-gradient-to-r from-blue-700 to-indigo-700">
+          {form.cover_url && <img src={form.cover_url} className="w-full h-full object-cover" alt="" />}
+        </div>
+        <div className="px-4 -mt-12">
+          <div className="w-24 h-24 rounded-full border-4 border-[#18191a] overflow-hidden bg-[#3a3b3c]">
+            {form.avatar_url && <img src={form.avatar_url} className="w-full h-full object-cover" alt="" />}
+          </div>
+          <h1 className="mt-3 text-3xl font-bold">{name}</h1>
+          {form.username && <p className="text-slate-400">@{form.username}</p>}
+          <p className="text-sm text-slate-400">{email}</p>
+          {form.bio && <p className="mt-3">{form.bio}</p>}
+          <div className="mt-3 text-sm text-slate-300 space-y-1">
+            {form.current_city && <p>Lives in {form.current_city}</p>}
+            {form.hometown && <p>From {form.hometown}</p>}
+            {form.workplace && <p>Works at {form.workplace}</p>}
+            {form.school && <p>Studied at {form.school}</p>}
+            {form.gender && <p>{form.gender}</p>}
+            {form.relationship_status && <p>{form.relationship_status}</p>}
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button onClick={() => setEditing(!editing)} className="px-4 py-2 rounded-lg bg-white/10">{editing ? 'Close' : 'Edit profile'}</button>
+            <Link href="/settings" className="px-4 py-2 rounded-lg bg-white/10">Settings</Link>
+          </div>
+        </div>
 
-        {active && (
-          <div>
-            <button onClick={() => setActive(null)} className="text-[#0866ff] text-sm">← People</button>
-            <div className="mt-4 w-24 h-24 rounded-full bg-[#3a3b3c] overflow-hidden">
-              {active.avatar_url && <img src={active.avatar_url} className="w-full h-full object-cover" alt="" />}
-            </div>
-            <h1 className="mt-4 text-3xl font-bold">{active.display_name || active.username || 'User'}</h1>
-            <p className="text-slate-400">@{active.username || 'user'}</p>
-            <p className="mt-3">{active.bio}</p>
-            <p className="mt-2 text-sm text-slate-400">{[active.current_city, active.hometown].filter(Boolean).join(' · ')}</p>
-            {status === 'accepted' && <p className="mt-4 text-[#0866ff]">Friends</p>}
-            {status === 'pending' && <p className="mt-4 text-slate-400">Request pending</p>}
-            <div className="mt-4 flex gap-2">
-              {!status && !blocked && <button onClick={add} className="px-5 py-2 rounded-xl bg-[#0866ff] font-semibold">Add friend</button>}
-              <button onClick={block} className="px-5 py-2 rounded-xl bg-white/10">{blocked ? 'Unblock' : 'Block'}</button>
-            </div>
+        {editing && (
+          <div className="px-4 mt-4 space-y-2">
+            <input value={form.full_name} onChange={e => setField('full_name', e.target.value)} placeholder="Full name" className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none" />
+            <input value={form.display_name} onChange={e => setField('display_name', e.target.value)} placeholder="Display name" className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none" />
+            <input value={form.username} onChange={e => setField('username', e.target.value)} placeholder="Username" className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none" />
+            <textarea value={form.bio} onChange={e => setField('bio', e.target.value)} placeholder="Bio" className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none" />
+            <input value={form.current_city} onChange={e => setField('current_city', e.target.value)} placeholder="Current city" className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none" />
+            <input value={form.hometown} onChange={e => setField('hometown', e.target.value)} placeholder="Hometown" className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none" />
+            <input value={form.workplace} onChange={e => setField('workplace', e.target.value)} placeholder="Workplace" className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none" />
+            <input value={form.school} onChange={e => setField('school', e.target.value)} placeholder="School" className="w-full px-4 py-3 rounded-xl bg-[#3a3b3c] outline-none" />
+            <button onClick={save} className="w-full py-3 rounded-xl bg-[#0866ff] font-semibold">Save</button>
           </div>
         )}
+
+        <div className="px-4 mt-8">
+          <h2 className="font-bold">Your Echoes</h2>
+          <div className="mt-3 space-y-3">
+            {echoes.map(echo => (
+              <div key={echo.id} className="rounded-xl bg-[#242526] p-4">
+                <p className="text-xs text-slate-400">{echo.status}</p>
+                <p className="mt-1">{echo.content}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </AppChrome>
   );
