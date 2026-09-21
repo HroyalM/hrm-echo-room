@@ -12,7 +12,7 @@ type Item = { id: string; kind: 'echo' | 'post'; content: string; created_at: st
 const stories = [
   { href: '/friends', label: 'Friends', img: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=400&q=80' },
   { href: '/groups', label: 'Groups', img: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=400&q=80' },
-  { href: '/echoes/vault', label: 'Vault', img: 'https://images.unsplash.com/photo-1614064641938-8b6d54658536?auto=format&fit=crop&w=400&q=80' },
+  { href: '/echoes/vault', label: 'Vault', img: 'https://images.pexels.com/photos/4386321/pexels-photo-4386321.jpeg?auto=compress&cs=tinysrgb&w=400' },
   { href: '/people', label: 'People', img: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=400&q=80' },
 ];
 
@@ -69,7 +69,7 @@ export default function HomePage() {
   return (
     <AppChrome avatar={avatar} unread={unread}>
       <div className="max-w-xl mx-auto pb-8">
-        <div className="flex gap-2.5 overflow-x-auto px-3 pt-3 no-scrollbar">
+        <div className="flex gap-2.5 overflow-x-auto px-3 pt-3">
           <Link href="/echoes/create" className="shrink-0 w-[86px]">
             <div className="relative h-[148px] rounded-2xl bg-[#1c1e21] overflow-hidden ring-1 ring-sky-500/40">
               {avatar ? (
@@ -106,10 +106,19 @@ export default function HomePage() {
               className="flex-1 bg-[#3a3b3c] rounded-full px-4 py-2.5 outline-none min-h-[42px] resize-none text-sm"
             />
           </div>
-          <div className="mt-3 flex justify-around text-sm">
-            <Link href="/echoes/create">Live Echo</Link>
-            <span>Photo</span>
-            <Link href="/people">Tag</Link>
+          <div className="mt-3 flex justify-around items-center text-sm">
+            <Link href="/echoes/create" className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded bg-red-600 text-white text-center text-xs leading-6">▶</span>
+              Live Echo
+            </Link>
+            <label className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded bg-green-600 text-white text-center text-xs leading-6">▣</span>
+              Photo
+            </label>
+            <Link href="/people" className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded bg-blue-600 text-white text-center text-xs leading-6">☺</span>
+              Tag
+            </Link>
           </div>
           <div className="mt-3 flex items-center">
             <select value={privacy} onChange={e => setPrivacy(e.target.value)} className="bg-[#3a3b3c] rounded-full px-3 py-2 text-sm">
