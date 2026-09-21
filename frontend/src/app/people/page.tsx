@@ -6,22 +6,18 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import AppChrome from '@/components/AppChrome';
 
-type Person = { id: string; email: string | null; display_name: string | null; username: string | null; full_name: string | null; bio: string | null; avatar_url: string | null };
-
-export default function PeoplePage() {'use client';
-
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
-import AppChrome from '@/components/AppChrome';
-
-type Person = { id: string; email: string | null; display_name: string | null; username: string | null; full_name: string | null; bio: string | null; avatar_url: string | null };
+type Person = {
+  id: string; email: string | null; display_name: string | null; username: string | null;
+  full_name: string | null; bio: string | null; avatar_url: string | null; cover_url: string | null;
+  hometown: string | null; current_city: string | null; workplace: string | null; school: string | null;
+  gender: string | null; relationship_status: string | null;
+};
 type FriendRow = { id: string; status: string; requester_id: string; addressee_email: string | null; addressee_id: string | null };
 
 export default function PeoplePage() {
   const router = useRouter();
   const [me, setMe] = useState('');
+  const [myEmail, setMyEmail] = useState('');
   const [avatar, setAvatar] = useState('');
   const [people, setPeople] = useState<Person[]>([]);
   const [active, setActive] = useState<Person | null>(null);
@@ -29,25 +25,25 @@ export default function PeoplePage() {
 
   const label = (p: Person) => p.display_name || p.full_name || p.username || p.email || 'User';
 
-  const findRow = (person: Person, rows: FriendRow[], userId: string) =>
-    rows.find(r => r.addressee_email === person.email || r.addressee_id === person.id || r.requester_id === person.id) || null;
-
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { router.push('/auth/login'); return; }
       setMe(data.user.id);
+      setMyEmail(data.user.email || '');
       const { data: mine } = await supabase.from('profiles').select('avatar_url').eq('id', data.user.id).maybeSingle();
       setAvatar(mine?.avatar_url || '');
-      const { data: rows, error } = await supabase.from('profiles').select('id, email, display_name, username, full_name, bio, avatar_url');
+      const { data: rows, error } = await supabase.from('profiles').select('id, email, display_name, username, full_name, bio, avatar_url, cover_url, hometown, current_city, workplace, school, gender, relationship_status');
       if (error) toast.error(error.message);
-      setPeople(((rows || []) as Person[]).filter(p => p.id !== data.user.id));
+      setPeople(((rows || []) as Person[]).filter(p => p.id !== data.user.id && p.email !== data.user.email));
     });
   }, [router]);
 
   const open = async (person: Person) => {
     setActive(person);
     const { data } = await supabase.from('friendships').select('id, status, requester_id, addressee_email, addressee_id');
-    setRow(findRow(person, (data || []) as FriendRow[], me));
+    setRow(((data || []) as FriendRow[]).find(r =>
+      r.addressee_email === person.email || r.addressee_id === person.id || r.requester_id === person.id
+    ) || null);
   };
 
   const add = async () => {
@@ -61,118 +57,54 @@ export default function PeoplePage() {
 
   const unadd = async () => {
     if (!row) return;
-    if (!confirm(row.status === 'accepted' ? 'Unfriend this person?' : 'Cancel request?')) return;
     const { error } = await supabase.from('friendships').delete().eq('id', row.id);
     if (error) toast.error(error.message);
-    else { setRow(null); toast.success(row.status === 'accepted' ? 'Removed' : 'Cancelled'); }
+    else { setRow(null); toast.success('Removed'); }
   };
 
   return (
     <AppChrome avatar={avatar}>
-      <div className="max-w-xl mx-auto p-4">
+      <div className="max-w-xl mx-auto pb-8">
         {!active && (
-          <>
+          <div className="p-4">
             <h1 className="text-2xl font-bold">People you may know</h1>
             <div className="mt-4 space-y-2">
               {people.map(p => (
-                <button key={p.id} onClick={() => open(p)} className="w-full flex items-center gap-3 text-left p-4 rounded-2xl bg-[#242526]">
-                  <div className="w-12 h-12 rounded-full overflow-hidden bg-[#3a3b3c]">
-                    {p.avatar_url && <img src={p.avatar_url} className="w-full h-full object-cover" alt="" />}
-                  </div>
+                <button key={p.id} onClick={() => open(p)} className="w-full text-left p-4 rounded-2xl bg-[#242526]">
                   <p className="font-semibold">{label(p)}</p>
+                  <p className="text-sm text-slate-400">@{p.username || 'user'}</p>
                 </button>
               ))}
-            </div>
-          </>
-        )}
-        {active && (
-          <div>
-            <div className="w-24 h-24 rounded-full overflow-hidden bg-[#3a3b3c]">
-              {active.avatar_url && <img src={active.avatar_url} className="w-full h-full object-cover" alt="" />}
-            </div>
-            <h1 className="mt-4 text-3xl font-bold">{label(active)}</h1>
-            <p className="mt-2">{active.bio}</p>
-            <div className="mt-4 flex gap-2">
-              {!row && <button onClick={add} className="px-5 py-2 rounded-xl bg-[#0866ff] font-semibold">Add friend</button>}
-              {row?.status === 'pending' && <button onClick={unadd} className="px-5 py-2 rounded-xl bg-white/10">Cancel request</button>}
-              {row?.status === 'accepted' && <button onClick={unadd} className="px-5 py-2 rounded-xl bg-white/10">Unfriend</button>}
             </div>
           </div>
         )}
-      </div>
-    </AppChrome>
-  );
-}
-  const router = useRouter();
-  const [me, setMe] = useState('');
-  const [avatar, setAvatar] = useState('');
-  const [people, setPeople] = useState<Person[]>([]);
-  const [active, setActive] = useState<Person | null>(null);
-  const [status, setStatus] = useState('');
 
-  const label = (p: Person) => p.display_name || p.full_name || p.username || p.email || 'User';
-
-  const open = async (person: Person, userId: string) => {
-    setActive(person);
-    const { data } = await supabase.from('friendships').select('status, requester_id, addressee_email, addressee_id');
-    const row = (data || []).find(r => r.addressee_email === person.email || r.addressee_id === person.id || r.requester_id === person.id);
-    setStatus(row?.status || '');
-  };
-
-  useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) { router.push('/auth/login'); return; }
-      setMe(data.user.id);
-      const { data: mine } = await supabase.from('profiles').select('avatar_url').eq('id', data.user.id).maybeSingle();
-      setAvatar(mine?.avatar_url || '');
-      const { data: rows, error } = await supabase.from('profiles').select('id, email, display_name, username, full_name, bio, avatar_url');
-      if (error) toast.error(error.message);
-      const list = ((rows || []) as Person[]).filter(p => p.id !== data.user.id);
-      setPeople(list);
-      const email = new URLSearchParams(window.location.search).get('email');
-      if (email) {
-        const found = list.find(p => p.email === email);
-        if (found) open(found, data.user.id);
-      }
-    });
-  }, [router]);
-
-  const add = async () => {
-    if (!active) return;
-    const { error } = await supabase.from('friendships').insert({ requester_id: me, addressee_email: active.email, addressee_id: active.id, status: 'pending' });
-    if (error) toast.error(error.message);
-    else { toast.success('Request sent'); setStatus('pending'); }
-  };
-
-  return (
-    <AppChrome avatar={avatar}>
-      <div className="max-w-xl mx-auto p-4">
-        {!active && (
-          <>
-            <h1 className="text-2xl font-bold">People you may know</h1>
-            {people.length === 0 && <p className="mt-6 text-slate-400">No other accounts yet.</p>}
-            <div className="mt-4 space-y-2">
-              {people.map(p => (
-                <button key={p.id} onClick={() => open(p, me)} className="w-full flex items-center gap-3 text-left p-4 rounded-2xl bg-[#242526]">
-                  <div className="w-12 h-12 rounded-full overflow-hidden bg-[#3a3b3c]">
-                    {p.avatar_url && <img src={p.avatar_url} className="w-full h-full object-cover" alt="" />}
-                  </div>
-                  <div>
-                    <p className="font-semibold">{label(p)}</p>
-                    <p className="text-sm text-slate-400">@{p.username || 'user'}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
         {active && (
           <div>
-            <h1 className="text-3xl font-bold">{label(active)}</h1>
-            <p className="mt-3">{active.bio}</p>
-            {status === 'accepted' && <p className="mt-4 text-[#0866ff]">Friends</p>}
-            {status === 'pending' && <p className="mt-4 text-slate-400">Request pending</p>}
-            {!status && <button onClick={add} className="mt-4 px-5 py-2 rounded-xl bg-[#0866ff] font-semibold">Add friend</button>}
+            <div className="h-36 bg-gradient-to-r from-blue-800 to-indigo-800">
+              {active.cover_url && <img src={active.cover_url} className="w-full h-full object-cover" alt="" />}
+            </div>
+            <div className="px-4 -mt-10">
+              <div className="w-24 h-24 rounded-full border-4 border-[#18191a] overflow-hidden bg-[#3a3b3c]">
+                {active.avatar_url && <img src={active.avatar_url} className="w-full h-full object-cover" alt="" />}
+              </div>
+              <h1 className="mt-3 text-3xl font-bold">{label(active)}</h1>
+              {active.username && <p className="text-slate-400">@{active.username}</p>}
+              {active.bio && <p className="mt-3">{active.bio}</p>}
+              <div className="mt-3 text-sm text-slate-300 space-y-1">
+                {active.current_city && <p>Lives in {active.current_city}</p>}
+                {active.hometown && <p>From {active.hometown}</p>}
+                {active.workplace && <p>Works at {active.workplace}</p>}
+                {active.school && <p>Studied at {active.school}</p>}
+                {active.gender && <p>{active.gender}</p>}
+                {active.relationship_status && <p>{active.relationship_status}</p>}
+              </div>
+              <div className="mt-4 flex gap-2">
+                {!row && <button onClick={add} className="px-5 py-2 rounded-xl bg-[#0866ff] font-semibold">Add friend</button>}
+                {row?.status === 'pending' && <button onClick={unadd} className="px-5 py-2 rounded-xl bg-white/10">Cancel request</button>}
+                {row?.status === 'accepted' && <button onClick={unadd} className="px-5 py-2 rounded-xl bg-white/10">Unfriend</button>}
+              </div>
+            </div>
           </div>
         )}
       </div>
