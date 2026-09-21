@@ -8,7 +8,101 @@ import AppChrome from '@/components/AppChrome';
 
 type Person = { id: string; email: string | null; display_name: string | null; username: string | null; full_name: string | null; bio: string | null; avatar_url: string | null };
 
+export default function PeoplePage() {'use client';
+
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
+import AppChrome from '@/components/AppChrome';
+
+type Person = { id: string; email: string | null; display_name: string | null; username: string | null; full_name: string | null; bio: string | null; avatar_url: string | null };
+type FriendRow = { id: string; status: string; requester_id: string; addressee_email: string | null; addressee_id: string | null };
+
 export default function PeoplePage() {
+  const router = useRouter();
+  const [me, setMe] = useState('');
+  const [avatar, setAvatar] = useState('');
+  const [people, setPeople] = useState<Person[]>([]);
+  const [active, setActive] = useState<Person | null>(null);
+  const [row, setRow] = useState<FriendRow | null>(null);
+
+  const label = (p: Person) => p.display_name || p.full_name || p.username || p.email || 'User';
+
+  const findRow = (person: Person, rows: FriendRow[], userId: string) =>
+    rows.find(r => r.addressee_email === person.email || r.addressee_id === person.id || r.requester_id === person.id) || null;
+
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) { router.push('/auth/login'); return; }
+      setMe(data.user.id);
+      const { data: mine } = await supabase.from('profiles').select('avatar_url').eq('id', data.user.id).maybeSingle();
+      setAvatar(mine?.avatar_url || '');
+      const { data: rows, error } = await supabase.from('profiles').select('id, email, display_name, username, full_name, bio, avatar_url');
+      if (error) toast.error(error.message);
+      setPeople(((rows || []) as Person[]).filter(p => p.id !== data.user.id));
+    });
+  }, [router]);
+
+  const open = async (person: Person) => {
+    setActive(person);
+    const { data } = await supabase.from('friendships').select('id, status, requester_id, addressee_email, addressee_id');
+    setRow(findRow(person, (data || []) as FriendRow[], me));
+  };
+
+  const add = async () => {
+    if (!active) return;
+    const { data, error } = await supabase.from('friendships').insert({
+      requester_id: me, addressee_email: active.email, addressee_id: active.id, status: 'pending',
+    }).select('id, status, requester_id, addressee_email, addressee_id').single();
+    if (error) toast.error(error.message);
+    else setRow(data as FriendRow);
+  };
+
+  const unadd = async () => {
+    if (!row) return;
+    if (!confirm(row.status === 'accepted' ? 'Unfriend this person?' : 'Cancel request?')) return;
+    const { error } = await supabase.from('friendships').delete().eq('id', row.id);
+    if (error) toast.error(error.message);
+    else { setRow(null); toast.success(row.status === 'accepted' ? 'Removed' : 'Cancelled'); }
+  };
+
+  return (
+    <AppChrome avatar={avatar}>
+      <div className="max-w-xl mx-auto p-4">
+        {!active && (
+          <>
+            <h1 className="text-2xl font-bold">People you may know</h1>
+            <div className="mt-4 space-y-2">
+              {people.map(p => (
+                <button key={p.id} onClick={() => open(p)} className="w-full flex items-center gap-3 text-left p-4 rounded-2xl bg-[#242526]">
+                  <div className="w-12 h-12 rounded-full overflow-hidden bg-[#3a3b3c]">
+                    {p.avatar_url && <img src={p.avatar_url} className="w-full h-full object-cover" alt="" />}
+                  </div>
+                  <p className="font-semibold">{label(p)}</p>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {active && (
+          <div>
+            <div className="w-24 h-24 rounded-full overflow-hidden bg-[#3a3b3c]">
+              {active.avatar_url && <img src={active.avatar_url} className="w-full h-full object-cover" alt="" />}
+            </div>
+            <h1 className="mt-4 text-3xl font-bold">{label(active)}</h1>
+            <p className="mt-2">{active.bio}</p>
+            <div className="mt-4 flex gap-2">
+              {!row && <button onClick={add} className="px-5 py-2 rounded-xl bg-[#0866ff] font-semibold">Add friend</button>}
+              {row?.status === 'pending' && <button onClick={unadd} className="px-5 py-2 rounded-xl bg-white/10">Cancel request</button>}
+              {row?.status === 'accepted' && <button onClick={unadd} className="px-5 py-2 rounded-xl bg-white/10">Unfriend</button>}
+            </div>
+          </div>
+        )}
+      </div>
+    </AppChrome>
+  );
+}
   const router = useRouter();
   const [me, setMe] = useState('');
   const [avatar, setAvatar] = useState('');
