@@ -3,62 +3,70 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import AppChrome from '@/components/AppChrome';
 
 type Note = {
   id: string;
   title: string | null;
   body: string | null;
+  type: string | null;
   read: boolean;
   created_at: string;
 };
 
 export default function NotificationsPage() {
   const router = useRouter();
+  const [userId, setUserId] = useState('');
+  const [avatar, setAvatar] = useState('');
   const [items, setItems] = useState<Note[]>([]);
 
-  const load = async (userId: string) => {
+  const load = async (id: string) => {
     const { data } = await supabase
       .from('notifications')
-      .select('id, title, body, read, created_at')
-      .eq('user_id', userId)
+      .select('id, title, body, type, read, created_at')
+      .eq('user_id', id)
       .order('created_at', { ascending: false });
     setItems(data || []);
   };
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) router.push('/auth/login');
-      else load(data.user.id);
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) { router.push('/auth/login'); return; }
+      setUserId(data.user.id);
+      const { data: profile } = await supabase.from('profiles').select('avatar_url').eq('id', data.user.id).single();
+      setAvatar(profile?.avatar_url || '');
+      load(data.user.id);
     });
   }, [router]);
 
-  const markRead = async (id: string) => {
-    await supabase.from('notifications').update({ read: true }).eq('id', id);
-    const { data: userData } = await supabase.auth.getUser();
-    if (userData.user) load(userData.user.id);
+  const openNote = async (item: Note) => {
+    await supabase.from('notifications').update({ read: true }).eq('id', item.id);
+    const t = (item.type || item.title || '').toLowerCase();
+    if (t.includes('friend')) router.push('/friends');
+    else if (t.includes('echo')) router.push('/echoes/vault');
+    else if (t.includes('message') || t.includes('chat')) router.push('/chat');
+    else load(userId);
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-6">
-      <div className="max-w-xl mx-auto">
-        <Link href="/home" className="text-sky-400 text-sm">← Back</Link>
-        <h1 className="mt-4 text-3xl font-bold">Notifications</h1>
+    <AppChrome avatar={avatar}>
+      <div className="max-w-xl mx-auto p-4">
+        <h1 className="text-2xl font-bold">Notifications</h1>
         {items.length === 0 && <p className="mt-8 text-slate-400">No notifications yet.</p>}
-        <div className="mt-8 space-y-3">
+        <div className="mt-6 space-y-2">
           {items.map(item => (
-            <div key={item.id} className="rounded-2xl bg-white/5 p-4">
-              <p className="font-semibold">{item.title}</p>
-              <p className="text-slate-300">{item.body}</p>
-              {!item.read && (
-                <button onClick={() => markRead(item.id)} className="mt-2 text-sm text-sky-400">
-                  Mark as read
-                </button>
-              )}
-            </div>
+            <button
+              key={item.id}
+              onClick={() => openNote(item)}
+              className={`w-full text-left rounded-2xl p-4 ${item.read ? 'bg-[#242526]' : 'bg-[#0866ff]/20'}`}
+            >
+              <p className="font-semibold">{item.title || 'Notification'}</p>
+              <p className="text-sm text-slate-300">{item.body}</p>
+              <p className="mt-1 text-xs text-slate-500">{new Date(item.created_at).toLocaleString()}</p>
+            </button>
           ))}
         </div>
       </div>
-    </div>
+    </AppChrome>
   );
 }
