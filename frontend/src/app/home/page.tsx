@@ -12,7 +12,7 @@ type Item = { id: string; kind: 'echo' | 'post'; content: string; created_at: st
 const stories = [
   { href: '/friends', label: 'Friends', img: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=400&q=80' },
   { href: '/groups', label: 'Groups', img: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=400&q=80' },
-  { href: '/echoes/vault', label: 'Vault', img: 'https://cdn.pixabay.com/photo/2016/11/29/09/16/safe-1868665_640.jpg' },
+  { href: '/echoes/vault', label: 'Vault', img: '' },
   { href: '/people', label: 'People', img: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=400&q=80' },
 ];
 
@@ -31,7 +31,7 @@ export default function HomePage() {
 
   const keyOf = (item: Item) => item.kind + ':' + item.id;
 
-  const loadSocial = async (list: Item[], id: string) => {
+  const loadSocial = async (id: string) => {
     const { data: likeRows } = await supabase.from('feed_likes').select('item_id, kind, user_id');
     const { data: commentRows } = await supabase.from('feed_comments').select('item_id, kind');
     const likeCount: Record<string, number> = {};
@@ -63,7 +63,7 @@ export default function HomePage() {
     ].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
     setUnread(count || 0);
     setItems(list);
-    loadSocial(list, id);
+    loadSocial(id);
   };
 
   useEffect(() => {
@@ -93,11 +93,8 @@ export default function HomePage() {
 
   const like = async (item: Item) => {
     const k = keyOf(item);
-    if (mine[k]) {
-      await supabase.from('feed_likes').delete().eq('user_id', userId).eq('item_id', item.id).eq('kind', item.kind);
-    } else {
-      await supabase.from('feed_likes').insert({ user_id: userId, item_id: item.id, kind: item.kind });
-    }
+    if (mine[k]) await supabase.from('feed_likes').delete().eq('user_id', userId).eq('item_id', item.id).eq('kind', item.kind);
+    else await supabase.from('feed_likes').insert({ user_id: userId, item_id: item.id, kind: item.kind });
     load(userId);
   };
 
@@ -125,8 +122,12 @@ export default function HomePage() {
           </Link>
           {stories.map(s => (
             <Link key={s.href} href={s.href} className="shrink-0 w-[86px]">
-              <div className="relative h-[148px] rounded-2xl overflow-hidden">
-                <img src={s.img} alt={s.label} className="absolute inset-0 w-full h-full object-cover" />
+              <div className="relative h-[148px] rounded-2xl overflow-hidden bg-black">
+                {s.img ? (
+                  <img src={s.img} alt={s.label} className="absolute inset-0 w-full h-full object-cover" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-4xl">🔒</div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
                 <p className="absolute bottom-2 w-full text-center text-[11px] font-semibold">{s.label}</p>
               </div>
