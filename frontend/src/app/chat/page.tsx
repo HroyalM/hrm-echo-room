@@ -10,14 +10,26 @@ import AppChrome from '@/components/AppChrome';
 type Friend = { email: string; name: string; avatar?: string };
 type Message = {
   id: string; sender_id: string; receiver_email: string; content: string;
-  created_at: string; liked?: boolean; edited?: boolean; seen?: boolean;
-  media_url?: string | null; media_type?: string | null;
+  created_at: string; seen?: boolean; media_url?: string | null; media_type?: string | null;
 };
+
+function beep() {
+  const ctx = new AudioContext();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.frequency.value = 880;
+  gain.gain.value = 0.05;
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.15);
+}
 
 export default function ChatPage() {
   const router = useRouter();
   const recRef = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const timerRef = useRef<number | null>(null);
   const [userId, setUserId] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [avatar, setAvatar] = useState('');
@@ -26,6 +38,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [recording, setRecording] = useState(false);
+  const [seconds, setSeconds] = useState(0);
 
   const loadFriends = async (id: string, myEmail: string) => {
     const { data } = await supabase.from('friendships').select('requester_id, addressee_email, addressee_id, status').eq('status', 'accepted');
@@ -44,9 +57,9 @@ export default function ChatPage() {
   const loadMessages = async (myEmail: string, friendEmail: string) => {
     await supabase.from('messages').update({ seen: true }).eq('receiver_email', myEmail);
     const { data } = await supabase.from('messages')
-      .select('id, sender_id, receiver_email, content, created_at, liked, edited, seen, media_url, media_type')
+      .select('id, sender_id, receiver_email, content, created_at, seen, media_url, media_type')
       .or(`receiver_email.eq.${friendEmail},receiver_email.eq.${myEmail}`)
-      .order('created_at').limit(100);
+      .order('created_at').limit(80);
     setMessages((data || []).filter(m => m.receiver_email === friendEmail || m.receiver_email === myEmail));
   };
 
@@ -58,17 +71,40 @@ export default function ChatPage() {
       const { data: profile } = await supabase.from('profiles').select('avatar_url').eq('id', data.user.id).single();
       setAvatar(profile?.avatar_url || '');
       loadFriends(data.user.id, data.user.email || '');
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
     });
   }, [router]);
+
+  useEffect(() => {
+    if (!userEmail) return;
+    const channel = supabase.channel('chat-live').on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'messages' },
+      payload => {
+        const m = payload.new as Message;
+        if (m.receiver_email !== userEmail) return;
+        beep();
+        if (document.hidden && Notification.permission === 'granted') {
+          new Notification('New message', { body: m.content || 'Photo or voice note' });
+        }
+        if (active && (m.receiver_email === active.email || m.sender_id !== userId)) {
+          setMessages(prev => [...prev, m]);
+        }
+      }
+    ).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [userEmail, active, userId]);
 
   const sendText = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!active || !text.trim()) return;
-    const { error } = await supabase.from('messages').insert({
-      sender_id: userId, receiver_email: active.email, content: text.trim(), seen: false,
-    });
+    const content = text.trim();
+    setText('');
+    const temp: Message = { id: 'temp-' + Date.now(), sender_id: userId, receiver_email: active.email, content, created_at: new Date().toISOString(), seen: false };
+    setMessages(prev => [...prev, temp]);
+    const { error } = await supabase.from('messages').insert({ sender_id: userId, receiver_email: active.email, content, seen: false });
     if (error) toast.error(error.message);
-    else { setText(''); loadMessages(userEmail, active.email); }
+    else loadMessages(userEmail, active.email);
   };
 
   const sendFile = async (file: File, type: string) => {
@@ -98,7 +134,18 @@ export default function ChatPage() {
     recRef.current = rec;
     rec.start();
     setRecording(true);
+    setSeconds(0);
+    timerRef.current = window.setInterval(() => setSeconds(s => s + 1), 1000);
   };
+
+  const stopRec = () => {
+    recRef.current?.stop();
+    setRecording(false);
+    if (timerRef.current) window.clearInterval(timerRef.current);
+  };
+
+  const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+  const ss = String(seconds % 60).padStart(2, '0');
 
   return (
     <AppChrome avatar={avatar}>
@@ -131,16 +178,25 @@ export default function ChatPage() {
                   {m.media_type === 'audio' && m.media_url && <audio controls src={m.media_url} className="w-full" />}
                   <p>{m.content}</p>
                   {m.sender_id === userId && (
-                    <p className={`text-right text-xs mt-1 ${m.seen ? 'text-sky-300' : 'text-white/50'}`}>
-                      {m.seen ? '✓✓' : '✓'}
-                    </p>
+                    <p className={`text-right text-xs mt-1 ${m.seen ? 'text-sky-300' : 'text-white/50'}`}>{m.seen ? '✓✓' : '✓'}</p>
                   )}
                 </div>
               ))}
             </div>
+
+            {recording && (
+              <div className="mx-3 mb-2 flex items-center gap-3 rounded-full bg-red-600/20 px-4 py-3">
+                <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+                <p className="flex-1 font-semibold">Recording {mm}:{ss}</p>
+                <button type="button" onClick={stopRec} className="px-4 py-1 rounded-full bg-red-500">Stop</button>
+              </div>
+            )}
+
             <form onSubmit={sendText} className="p-3 flex items-center gap-2 bg-[#242526]">
-              <label>📷<input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && sendFile(e.target.files[0], 'image')} /></label>
-              <button type="button" onClick={recording ? () => { recRef.current?.stop(); setRecording(false); } : startRec}>{recording ? '⏹' : '🎤'}</button>
+              <label className="text-xl">📷<input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && sendFile(e.target.files[0], 'image')} /></label>
+              <button type="button" onClick={recording ? stopRec : startRec} className={recording ? 'text-red-400 text-xl' : 'text-xl'}>
+                {recording ? '⏹' : '🎤'}
+              </button>
               <input value={text} onChange={e => setText(e.target.value)} placeholder="Message" className="flex-1 px-4 py-3 rounded-full bg-[#3a3b3c] outline-none" />
               <button className="px-4 py-3 rounded-full bg-[#0866ff]">Send</button>
             </form>
